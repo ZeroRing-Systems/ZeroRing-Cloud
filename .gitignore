@@ -1,0 +1,22 @@
+# C++ Backend & CMake
+/backend/build/
+/backend/CMakeCache.txt
+/backend/CMakeFiles/
+*.o
+*.out
+
+# Node & Frontend Dependencies (if used later)
+node_modules/
+npm-debug.log
+
+# WASM Artifacts (Ignore the copied file so Git doesn't track binary blobs)
+/bridge/*.wasm
+
+# Environment Variables (Keep DB credentials secret!)
+.env
+.env.local
+
+# OS and Editor Files
+.DS_Store
+.vscode/
+.idea/
