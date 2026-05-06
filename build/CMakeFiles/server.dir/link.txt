@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/server.dir/backend/server.cpp.o CMakeFiles/server.dir/backend/db_manager.cpp.o -o server 
