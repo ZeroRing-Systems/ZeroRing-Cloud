@@ -7,7 +7,7 @@ This repository contains two strictly isolated modules:
 
 #### 1. `/bridge` (The Motherboard & Display)
 The frontend UI and the JavaScript interop layer. 
-* **`bios.js`**: The magic layer. It intercepts virtual calls from the WASM kernel and routes them to browser APIs (like drawing to the HTML5 Canvas) or proxies them over WebSockets.
+* **`terminal.js`**: The magic layer. It intercepts virtual calls from the WASM kernel and routes them to browser APIs (like drawing to the HTML5 Canvas) or proxies them over WebSockets.
 * **Execution:** Drop the compiled `kernel.wasm` from the `ZeroKernel` repository into this folder to boot the OS.
 
 #### 2. `/backend` (The Hard Drive & Network)
