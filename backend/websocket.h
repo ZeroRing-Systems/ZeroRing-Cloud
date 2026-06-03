@@ -87,13 +87,20 @@ inline std::string compute_accept_key(const std::string& client_key) {
     return base64_encode(sha.digest());
 }
 
+inline std::string trim(const std::string& s) {
+    auto start = s.find_first_not_of(" \t\r\n");
+    if (start == std::string::npos) return "";
+    auto end = s.find_last_not_of(" \t\r\n");
+    return s.substr(start, end - start + 1);
+}
+
 inline std::string find_header(const std::string& request, const std::string& name) {
     std::string search = name + ": ";
     auto pos = request.find(search);
     if (pos == std::string::npos) return "";
     pos += search.size();
     auto end = request.find("\r\n", pos);
-    return request.substr(pos, end - pos);
+    return trim(request.substr(pos, end - pos));
 }
 
 struct Frame {
