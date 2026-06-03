@@ -81,7 +81,7 @@ inline std::string base64_encode(const std::string& in) {
 }
 
 inline std::string compute_accept_key(const std::string& client_key) {
-    std::string concat = client_key + "258EAFA5-E914-47DA-95CA-5AB5DC76B98E";
+    std::string concat = client_key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
     SHA1 sha;
     sha.update(reinterpret_cast<const uint8_t*>(concat.data()), concat.size());
     return base64_encode(sha.digest());
