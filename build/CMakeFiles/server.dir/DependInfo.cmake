@@ -8,7 +8,6 @@ set(CMAKE_DEPENDS_LANGUAGES
 
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
-  "/home/ifkabir/Coading/ZeroRing-Systems/ZeroRing-Cloud/backend/db_manager.cpp" "CMakeFiles/server.dir/backend/db_manager.cpp.o" "gcc" "CMakeFiles/server.dir/backend/db_manager.cpp.o.d"
   "/home/ifkabir/Coading/ZeroRing-Systems/ZeroRing-Cloud/backend/server.cpp" "CMakeFiles/server.dir/backend/server.cpp.o" "gcc" "CMakeFiles/server.dir/backend/server.cpp.o.d"
   )
 

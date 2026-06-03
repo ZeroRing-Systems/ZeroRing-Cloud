@@ -219,15 +219,6 @@ CMAKE_VERBOSE_MAKEFILE:BOOL=FALSE
 ZeroRingCloud_BINARY_DIR:STATIC=/home/ifkabir/Coading/ZeroRing-Systems/ZeroRing-Cloud/build
 
 //Value Computed by CMake
-ZeroRingCloud_Backend_BINARY_DIR:STATIC=/home/ifkabir/Coading/ZeroRing-Systems/ZeroRing-Cloud/build
-
-//Value Computed by CMake
-ZeroRingCloud_Backend_IS_TOP_LEVEL:STATIC=ON
-
-//Value Computed by CMake
-ZeroRingCloud_Backend_SOURCE_DIR:STATIC=/home/ifkabir/Coading/ZeroRing-Systems/ZeroRing-Cloud
-
-//Value Computed by CMake
 ZeroRingCloud_IS_TOP_LEVEL:STATIC=ON
 
 //Value Computed by CMake

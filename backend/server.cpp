@@ -4,6 +4,9 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include "websocket.h"
+#include "db_manager.h"
+
+static DBManager db;
 
 static int create_listener(int port) {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -40,6 +43,46 @@ static bool do_handshake(int client) {
     return true;
 }
 
+static std::string extract_json_value(const std::string& json, const std::string& key) {
+    std::string search = "\"" + key + "\":\"";
+    auto pos = json.find(search);
+    if (pos == std::string::npos) return "";
+    pos += search.size();
+    auto end = json.find("\"", pos);
+    if (end == std::string::npos) return "";
+    return json.substr(pos, end - pos);
+}
+
+static std::string handle_syscall(const std::string& payload) {
+    std::string action = extract_json_value(payload, "action");
+    std::string file = extract_json_value(payload, "file");
+
+    if (action == "read_file") {
+        std::string content = db.read_file(file);
+        if (content.empty() && !db.file_exists(file))
+            return "{\"status\":\"error\",\"message\":\"file not found: " + file + "\"}";
+        return "{\"status\":\"ok\",\"data\":\"" + content + "\"}";
+    }
+
+    if (action == "write_file") {
+        std::string data = extract_json_value(payload, "data");
+        db.save_file(file, data);
+        return "{\"status\":\"ok\"}";
+    }
+
+    if (action == "delete_file") {
+        if (db.delete_file(file))
+            return "{\"status\":\"ok\"}";
+        return "{\"status\":\"error\",\"message\":\"file not found: " + file + "\"}";
+    }
+
+    if (action == "list_files") {
+        return "{\"status\":\"ok\",\"files\":" + db.list_files() + "}";
+    }
+
+    return "{\"status\":\"error\",\"message\":\"unknown action: " + action + "\"}";
+}
+
 static void handle_client(int client) {
     if (!do_handshake(client)) {
         std::cerr << "[Backend] Handshake failed\n";
@@ -47,7 +90,7 @@ static void handle_client(int client) {
         return;
     }
 
-    std::cout << "[Backend] WebSocket handshake complete\n";
+    std::cout << "[Backend] WebSocket session established\n";
 
     while (true) {
         ws::Frame frame = ws::decode_frame(client);
@@ -58,8 +101,9 @@ static void handle_client(int client) {
         }
 
         if (frame.opcode == 0x1) {
-            std::cout << "[Backend] Received: " << frame.payload << "\n";
-            ws::send_frame(client, 0x1, "{\"status\":\"ok\"}");
+            std::cout << "[Backend] Syscall: " << frame.payload << "\n";
+            std::string response = handle_syscall(frame.payload);
+            ws::send_frame(client, 0x1, response);
         }
 
         if (frame.opcode == 0x9) {
@@ -73,6 +117,10 @@ static void handle_client(int client) {
 int main() {
     int port = 8080;
     int listener = create_listener(port);
+
+    db.connect();
+    db.save_file("config.sys", "SHELL=zerosh\\nHOSTNAME=zeroring\\nVERSION=0.1");
+    db.save_file("motd.txt", "Welcome to ZeroRing OS");
 
     std::cout << "[Backend] ZeroRing Cloud Server listening on ws://localhost:" << port << "\n";
 

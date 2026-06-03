@@ -129,30 +129,6 @@ server/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/server.dir/build.make CMakeFiles/server.dir/build
 .PHONY : server/fast
 
-backend/db_manager.o: backend/db_manager.cpp.o
-.PHONY : backend/db_manager.o
-
-# target to build an object file
-backend/db_manager.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/server.dir/build.make CMakeFiles/server.dir/backend/db_manager.cpp.o
-.PHONY : backend/db_manager.cpp.o
-
-backend/db_manager.i: backend/db_manager.cpp.i
-.PHONY : backend/db_manager.i
-
-# target to preprocess a source file
-backend/db_manager.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/server.dir/build.make CMakeFiles/server.dir/backend/db_manager.cpp.i
-.PHONY : backend/db_manager.cpp.i
-
-backend/db_manager.s: backend/db_manager.cpp.s
-.PHONY : backend/db_manager.s
-
-# target to generate assembly for a file
-backend/db_manager.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/server.dir/build.make CMakeFiles/server.dir/backend/db_manager.cpp.s
-.PHONY : backend/db_manager.cpp.s
-
 backend/server.o: backend/server.cpp.o
 .PHONY : backend/server.o
 
@@ -186,9 +162,6 @@ help:
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
 	@echo "... server"
-	@echo "... backend/db_manager.o"
-	@echo "... backend/db_manager.i"
-	@echo "... backend/db_manager.s"
 	@echo "... backend/server.o"
 	@echo "... backend/server.i"
 	@echo "... backend/server.s"
