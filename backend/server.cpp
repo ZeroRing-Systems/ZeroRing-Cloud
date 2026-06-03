@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include "websocket.h"
 
 static int create_listener(int port) {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -17,6 +18,56 @@ static int create_listener(int port) {
     bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
     listen(fd, 4);
     return fd;
+}
+
+static bool do_handshake(int client) {
+    char buf[4096]{};
+    int n = recv(client, buf, sizeof(buf) - 1, 0);
+    if (n <= 0) return false;
+
+    std::string request(buf, n);
+    std::string key = ws::find_header(request, "Sec-WebSocket-Key");
+    if (key.empty()) return false;
+
+    std::string accept = ws::compute_accept_key(key);
+    std::string response =
+        "HTTP/1.1 101 Switching Protocols\r\n"
+        "Upgrade: websocket\r\n"
+        "Connection: Upgrade\r\n"
+        "Sec-WebSocket-Accept: " + accept + "\r\n\r\n";
+
+    send(client, response.c_str(), response.size(), 0);
+    return true;
+}
+
+static void handle_client(int client) {
+    if (!do_handshake(client)) {
+        std::cerr << "[Backend] Handshake failed\n";
+        close(client);
+        return;
+    }
+
+    std::cout << "[Backend] WebSocket handshake complete\n";
+
+    while (true) {
+        ws::Frame frame = ws::decode_frame(client);
+
+        if (frame.opcode == 0x8 || frame.opcode == 0x0) {
+            std::cout << "[Backend] Client disconnected\n";
+            break;
+        }
+
+        if (frame.opcode == 0x1) {
+            std::cout << "[Backend] Received: " << frame.payload << "\n";
+            ws::send_frame(client, 0x1, "{\"status\":\"ok\"}");
+        }
+
+        if (frame.opcode == 0x9) {
+            ws::send_frame(client, 0xA, frame.payload);
+        }
+    }
+
+    close(client);
 }
 
 int main() {
@@ -36,7 +87,7 @@ int main() {
         }
 
         std::cout << "[Backend] Client connected\n";
-        close(client);
+        handle_client(client);
     }
 
     close(listener);
