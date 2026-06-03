@@ -1,5 +1,7 @@
 #include <iostream>
 #include <cstring>
+#include <thread>
+#include <mutex>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -7,6 +9,7 @@
 #include "db_manager.h"
 
 static DBManager db;
+static std::mutex db_mutex;
 
 static int create_listener(int port) {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -56,6 +59,8 @@ static std::string extract_json_value(const std::string& json, const std::string
 static std::string handle_syscall(const std::string& payload) {
     std::string action = extract_json_value(payload, "action");
     std::string file = extract_json_value(payload, "file");
+
+    std::lock_guard<std::mutex> lock(db_mutex);
 
     if (action == "read_file") {
         std::string content = db.read_file(file);
@@ -135,7 +140,7 @@ int main() {
         }
 
         std::cout << "[Backend] Client connected\n";
-        handle_client(client);
+        std::thread(handle_client, client).detach();
     }
 
     close(listener);
