@@ -91,6 +91,7 @@ const imports = {
       return k;
     },
     js_draw_pixel: (x, y, color) => {
+      if (canvas.style.display === "none") canvas.style.display = "block";
       const r = (color >> 16) & 0xff;
       const g = (color >> 8) & 0xff;
       const b = color & 0xff;
