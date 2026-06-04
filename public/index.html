@@ -4,16 +4,54 @@
     <meta charset="UTF-8" />
     <title>ZeroRing OS</title>
     <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
       body {
-        background: #000;
-        color: #0f0;
-        font-family: monospace;
-        padding: 20px;
+        background: #0a0a0a;
+        color: #c8c8c8;
+        font-family: "Courier New", monospace;
+        font-size: 14px;
+        height: 100vh;
+        overflow: hidden;
+      }
+      #terminal {
+        height: 100vh;
+        padding: 12px;
+        overflow-y: auto;
+        outline: none;
+      }
+      #terminal::-webkit-scrollbar { width: 6px; }
+      #terminal::-webkit-scrollbar-track { background: #0a0a0a; }
+      #terminal::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+      #output div { white-space: pre-wrap; word-break: break-all; line-height: 1.5; }
+      #input-line {
+        display: none;
+        align-items: center;
+        line-height: 1.5;
+      }
+      #prompt { color: #5faf5f; }
+      #cmd { color: #c8c8c8; }
+      #cursor {
+        display: inline-block;
+        width: 7px;
+        height: 14px;
+        background: #c8c8c8;
+        animation: blink 1s step-end infinite;
+        vertical-align: text-bottom;
+      }
+      @keyframes blink {
+        50% { opacity: 0; }
       }
     </style>
   </head>
   <body>
-    <div id="terminal"></div>
+    <div id="terminal" tabindex="0">
+      <div id="output"></div>
+      <div id="input-line">
+        <span id="prompt">$ </span>
+        <span id="cmd"></span>
+        <span id="cursor"></span>
+      </div>
+    </div>
     <script src="terminal.js"></script>
   </body>
 </html>
