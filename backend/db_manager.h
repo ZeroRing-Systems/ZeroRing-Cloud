@@ -1,25 +1,21 @@
 #pragma once
 #include <string>
 #include <unordered_map>
-#include <iostream>
+#include <vector>
 
 struct DBManager {
     std::unordered_map<std::string, std::string> store;
 
-    void connect() {
-        std::cout << "[Database] Virtual filesystem initialized\n";
-    }
+    void connect() {}
 
     bool save_file(const std::string& path, const std::string& data) {
         store[path] = data;
-        std::cout << "[Database] Wrote " << data.size() << " bytes to " << path << "\n";
         return true;
     }
 
     std::string read_file(const std::string& path) {
         auto it = store.find(path);
         if (it == store.end()) return "";
-        std::cout << "[Database] Read " << path << "\n";
         return it->second;
     }
 
@@ -31,19 +27,14 @@ struct DBManager {
         auto it = store.find(path);
         if (it == store.end()) return false;
         store.erase(it);
-        std::cout << "[Database] Deleted " << path << "\n";
         return true;
     }
 
-    std::string list_files() {
-        std::string result = "[";
-        bool first = true;
-        for (auto& [k, v] : store) {
-            if (!first) result += ",";
-            result += "\"" + k + "\"";
-            first = false;
-        }
-        result += "]";
-        return result;
+    std::vector<std::string> list_files() {
+        std::vector<std::string> out;
+        out.reserve(store.size());
+        for (auto& [k, _] : store)
+            out.push_back(k);
+        return out;
     }
 };
