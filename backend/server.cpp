@@ -49,7 +49,15 @@ static bool do_handshake(int client) {
 static std::string extract_json_value(const std::string& json, const std::string& key) {
     std::string search = "\"" + key + "\":\"";
     auto pos = json.find(search);
-    if (pos == std::string::npos) return "";
+    if (pos == std::string::npos) {
+        search = "\"" + key + "\":";
+        pos = json.find(search);
+        if (pos == std::string::npos) return "";
+        pos += search.size();
+        auto end = pos;
+        while (end < json.size() && json[end] != ',' && json[end] != '}') end++;
+        return json.substr(pos, end - pos);
+    }
     pos += search.size();
     auto end = json.find("\"", pos);
     if (end == std::string::npos) return "";
@@ -90,6 +98,49 @@ static std::string handle_syscall(const std::string& payload) {
         }
         arr += "]";
         return "{\"status\":\"ok\",\"files\":" + arr + "}";
+    }
+
+    if (action == "open") {
+        std::string flags_str = extract_json_value(payload, "flags");
+        int flags = 0;
+        if (!flags_str.empty()) flags = std::stoi(flags_str);
+        int fd = db.open_file(file, flags);
+        if (fd < 0)
+            return "{\"status\":\"error\",\"message\":\"cannot open\"}";
+        return "{\"status\":\"ok\",\"fd\":" + std::to_string(fd) + "}";
+    }
+
+    if (action == "fd_read") {
+        std::string fd_str = extract_json_value(payload, "fd");
+        if (fd_str.empty())
+            return "{\"status\":\"error\",\"message\":\"missing fd\"}";
+        int fd = std::stoi(fd_str);
+        if (!db.fd_valid(fd))
+            return "{\"status\":\"error\",\"message\":\"bad fd\"}";
+        std::string content = db.fd_read(fd);
+        return "{\"status\":\"ok\",\"data\":\"" + content + "\"}";
+    }
+
+    if (action == "fd_write") {
+        std::string fd_str = extract_json_value(payload, "fd");
+        if (fd_str.empty())
+            return "{\"status\":\"error\",\"message\":\"missing fd\"}";
+        int fd = std::stoi(fd_str);
+        std::string data = extract_json_value(payload, "data");
+        int n = db.fd_write(fd, data);
+        if (n < 0)
+            return "{\"status\":\"error\",\"message\":\"bad fd\"}";
+        return "{\"status\":\"ok\",\"bytes\":" + std::to_string(n) + "}";
+    }
+
+    if (action == "close") {
+        std::string fd_str = extract_json_value(payload, "fd");
+        if (fd_str.empty())
+            return "{\"status\":\"error\",\"message\":\"missing fd\"}";
+        int fd = std::stoi(fd_str);
+        if (!db.fd_close(fd))
+            return "{\"status\":\"error\",\"message\":\"bad fd\"}";
+        return "{\"status\":\"ok\"}";
     }
 
     return "{\"status\":\"error\",\"message\":\"unknown action\"}";
