@@ -3,10 +3,13 @@ const output = document.getElementById("output");
 const inputLine = document.getElementById("input-line");
 const promptEl = document.getElementById("prompt");
 const cmdInput = document.getElementById("cmd");
+const canvas = document.getElementById("framebuffer");
+const ctx = canvas.getContext("2d");
 
 let mem;
 let wasmInstance;
 let currentPrompt = "$ ";
+let lastKey = 0;
 
 const readStr = (ptr) => {
   const bytes = new Uint8Array(mem.buffer);
@@ -82,10 +85,23 @@ const imports = {
       currentPrompt = readStr(p);
       promptEl.textContent = currentPrompt;
     },
+    js_read_key: () => {
+      const k = lastKey;
+      lastKey = 0;
+      return k;
+    },
+    js_draw_pixel: (x, y, color) => {
+      const r = (color >> 16) & 0xff;
+      const g = (color >> 8) & 0xff;
+      const b = color & 0xff;
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.fillRect(x, y, 1, 1);
+    },
   },
 };
 
 const feedKey = (code) => {
+  lastKey = code;
   if (wasmInstance && wasmInstance.exports.handle_key) {
     wasmInstance.exports.handle_key(code);
   }
