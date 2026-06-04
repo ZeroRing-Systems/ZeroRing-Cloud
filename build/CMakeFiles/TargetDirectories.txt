@@ -1,3 +1,0 @@
-/home/ifkabir/Coading/ZeroRing-Systems/ZeroRing-Cloud/build/CMakeFiles/server.dir
-/home/ifkabir/Coading/ZeroRing-Systems/ZeroRing-Cloud/build/CMakeFiles/edit_cache.dir
-/home/ifkabir/Coading/ZeroRing-Systems/ZeroRing-Cloud/build/CMakeFiles/rebuild_cache.dir
