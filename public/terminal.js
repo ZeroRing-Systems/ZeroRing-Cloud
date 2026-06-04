@@ -1,14 +1,29 @@
 const terminal = document.getElementById("terminal");
-const log = (msg) => {
-  terminal.innerHTML += msg + "<br>";
-};
+const output = document.getElementById("output");
+const inputLine = document.getElementById("input-line");
+const promptEl = document.getElementById("prompt");
+const cmdInput = document.getElementById("cmd");
 
 let mem;
+let wasmInstance;
+let currentPrompt = "$ ";
+
 const readStr = (ptr) => {
   const bytes = new Uint8Array(mem.buffer);
   const b = [];
   while (bytes[ptr]) b.push(bytes[ptr++]);
   return new TextDecoder().decode(new Uint8Array(b));
+};
+
+const print = (text) => {
+  if (text === "\x1b[clear]") {
+    output.innerHTML = "";
+    return;
+  }
+  const div = document.createElement("div");
+  div.textContent = text;
+  output.appendChild(div);
+  terminal.scrollTop = terminal.scrollHeight;
 };
 
 let pendingMessages = [];
@@ -18,15 +33,31 @@ const ws = new WebSocket("ws://localhost:8080");
 
 ws.onopen = () => {
   wsReady = true;
-  log("[Cloud] Connected.");
   pendingMessages.forEach((msg) => ws.send(msg));
   pendingMessages = [];
 };
 
-ws.onmessage = (e) => log("[Cloud] " + e.data);
+ws.onmessage = (e) => {
+  try {
+    const data = JSON.parse(e.data);
+    if (data.status === "ok") {
+      if (data.files) {
+        print(data.files.join("  "));
+      } else if (data.data !== undefined) {
+        print(data.data);
+      } else {
+        print("ok");
+      }
+    } else {
+      print(data.message || "error");
+    }
+  } catch {
+    print(e.data);
+  }
+};
 
 ws.onerror = () => {
-  if (!wsReady) log("[Cloud] Offline — backend not running.");
+  if (!wsReady) print("backend offline");
 };
 
 ws.onclose = () => {
@@ -43,21 +74,57 @@ const sendToCloud = (payload) => {
 
 const imports = {
   env: {
-    js_print_text: (p) => log("[Kernel] " + readStr(p)),
+    js_print_text: (p) => print(readStr(p)),
     js_network_request: (p) => {
-      const payload = readStr(p);
-      log("[BIOS] Syscall → " + payload);
-      sendToCloud(payload);
+      sendToCloud(readStr(p));
+    },
+    js_set_prompt: (p) => {
+      currentPrompt = readStr(p);
+      promptEl.textContent = currentPrompt;
     },
   },
 };
 
-log("[BIOS] Loading kernel...");
+const feedKey = (code) => {
+  if (wasmInstance && wasmInstance.exports.handle_key) {
+    wasmInstance.exports.handle_key(code);
+  }
+};
+
+document.addEventListener("keydown", (e) => {
+  if (!wasmInstance) return;
+
+  if (e.key === "Enter") {
+    const echo = currentPrompt + cmdInput.textContent;
+    print(echo);
+    feedKey(13);
+    cmdInput.textContent = "";
+    e.preventDefault();
+    return;
+  }
+
+  if (e.key === "Backspace") {
+    feedKey(8);
+    const t = cmdInput.textContent;
+    cmdInput.textContent = t.slice(0, -1);
+    e.preventDefault();
+    return;
+  }
+
+  if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+    feedKey(e.key.charCodeAt(0));
+    cmdInput.textContent += e.key;
+    e.preventDefault();
+  }
+});
+
+terminal.addEventListener("click", () => terminal.focus());
+
 WebAssembly.instantiateStreaming(fetch("wasm/kernel.wasm"), imports)
   .then(({ instance }) => {
     mem = instance.exports.memory;
-    log("[BIOS] kernel.wasm loaded.");
+    wasmInstance = instance;
     instance.exports.kernel_main();
-    log("[BIOS] Boot complete.");
+    inputLine.style.display = "flex";
   })
-  .catch((e) => log("[BIOS] Error: " + e));
+  .catch((e) => print("boot failed: " + e));
