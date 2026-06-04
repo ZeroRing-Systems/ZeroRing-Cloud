@@ -41,11 +41,18 @@
       @keyframes blink {
         50% { opacity: 0; }
       }
+      #framebuffer {
+        display: none;
+        image-rendering: pixelated;
+        border: 1px solid #333;
+        margin: 8px 0;
+      }
     </style>
   </head>
   <body>
     <div id="terminal" tabindex="0">
       <div id="output"></div>
+      <canvas id="framebuffer" width="320" height="200"></canvas>
       <div id="input-line">
         <span id="prompt">$ </span>
         <span id="cmd"></span>
