@@ -19,10 +19,7 @@
         overflow-y: auto;
         outline: none;
       }
-      #terminal::-webkit-scrollbar { width: 6px; }
-      #terminal::-webkit-scrollbar-track { background: #0a0a0a; }
-      #terminal::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
-      #output div { white-space: pre-wrap; word-break: break-all; line-height: 1.5; }
+      #output div { white-space: pre-wrap; line-height: 1.5; }
       #input-line {
         display: none;
         align-items: center;
@@ -38,21 +35,12 @@
         animation: blink 1s step-end infinite;
         vertical-align: text-bottom;
       }
-      @keyframes blink {
-        50% { opacity: 0; }
-      }
-      #framebuffer {
-        display: none;
-        image-rendering: pixelated;
-        border: 1px solid #333;
-        margin: 8px 0;
-      }
+      @keyframes blink { 50% { opacity: 0; } }
     </style>
   </head>
   <body>
     <div id="terminal" tabindex="0">
       <div id="output"></div>
-      <canvas id="framebuffer" width="320" height="200"></canvas>
       <div id="input-line">
         <span id="prompt">$ </span>
         <span id="cmd"></span>
