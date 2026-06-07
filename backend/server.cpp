@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cstring>
+#include <cstdlib>
 #include <thread>
 #include <mutex>
 #include <unistd.h>
@@ -21,8 +22,16 @@ static int create_listener(int port) {
     addr.sin_addr.s_addr = INADDR_ANY;
     addr.sin_port = htons(port);
 
-    bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
-    listen(fd, 4);
+    if (bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
+        std::cerr << "bind failed on port " << port << "\n";
+        close(fd);
+        std::exit(1);
+    }
+    if (listen(fd, 4) < 0) {
+        std::cerr << "listen failed\n";
+        close(fd);
+        std::exit(1);
+    }
     return fd;
 }
 
