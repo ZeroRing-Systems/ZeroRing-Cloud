@@ -3,104 +3,46 @@
 #include <cstdint>
 #include <cstring>
 #include <vector>
+#include <openssl/sha.h>
+#include <openssl/bio.h>
+#include <openssl/evp.h>
+#include <openssl/buffer.h>
+#include <sys/socket.h>
 
 namespace ws {
 
-struct SHA1 {
-    uint32_t state[5] = {0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0};
-    uint64_t count = 0;
-    uint8_t buffer[64]{};
-
-    static uint32_t rol(uint32_t v, int bits) { return (v << bits) | (v >> (32 - bits)); }
-
-    void transform(const uint8_t block[64]) {
-        uint32_t w[80];
-        for (int i = 0; i < 16; i++)
-            w[i] = (block[i*4] << 24) | (block[i*4+1] << 16) | (block[i*4+2] << 8) | block[i*4+3];
-        for (int i = 16; i < 80; i++)
-            w[i] = rol(w[i-3] ^ w[i-8] ^ w[i-14] ^ w[i-16], 1);
-
-        uint32_t a = state[0], b = state[1], c = state[2], d = state[3], e = state[4];
-        for (int i = 0; i < 80; i++) {
-            uint32_t f, k;
-            if (i < 20)      { f = (b & c) | (~b & d);       k = 0x5A827999; }
-            else if (i < 40) { f = b ^ c ^ d;                k = 0x6ED9EBA1; }
-            else if (i < 60) { f = (b & c) | (b & d) | (c & d); k = 0x8F1BBCDC; }
-            else              { f = b ^ c ^ d;                k = 0xCA62C1D6; }
-            uint32_t tmp = rol(a, 5) + f + e + k + w[i];
-            e = d; d = c; c = rol(b, 30); b = a; a = tmp;
-        }
-        state[0] += a; state[1] += b; state[2] += c; state[3] += d; state[4] += e;
-    }
-
-    void update(const uint8_t* data, size_t len) {
-        size_t idx = count % 64;
-        count += len;
-        for (size_t i = 0; i < len; i++) {
-            buffer[idx++] = data[i];
-            if (idx == 64) { transform(buffer); idx = 0; }
-        }
-    }
-
-    std::string digest() {
-        uint64_t bits = count * 8;
-        uint8_t pad = 0x80;
-        update(&pad, 1);
-        pad = 0;
-        while (count % 64 != 56) update(&pad, 1);
-        for (int i = 7; i >= 0; i--) {
-            uint8_t b = (bits >> (i * 8)) & 0xFF;
-            update(&b, 1);
-        }
-        std::string out(20, '\0');
-        for (int i = 0; i < 5; i++) {
-            out[i*4]   = (state[i] >> 24) & 0xFF;
-            out[i*4+1] = (state[i] >> 16) & 0xFF;
-            out[i*4+2] = (state[i] >> 8)  & 0xFF;
-            out[i*4+3] =  state[i]        & 0xFF;
-        }
-        return out;
-    }
-};
-
-inline std::string base64_encode(const std::string& in) {
-    static const char table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    std::string out;
-    int val = 0, valb = -6;
-    for (uint8_t c : in) {
-        val = (val << 8) + c;
-        valb += 8;
-        while (valb >= 0) {
-            out.push_back(table[(val >> valb) & 0x3F]);
-            valb -= 6;
-        }
-    }
-    if (valb > -6) out.push_back(table[((val << 8) >> (valb + 8)) & 0x3F]);
-    while (out.size() % 4) out.push_back('=');
-    return out;
+inline std::string base64_encode(const unsigned char* data, int len) {
+    BIO* b64 = BIO_new(BIO_f_base64());
+    BIO* mem = BIO_new(BIO_s_mem());
+    b64 = BIO_push(b64, mem);
+    BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
+    BIO_write(b64, data, len);
+    BIO_flush(b64);
+    BUF_MEM* bptr;
+    BIO_get_mem_ptr(b64, &bptr);
+    std::string result(bptr->data, bptr->length);
+    BIO_free_all(b64);
+    return result;
 }
 
 inline std::string compute_accept_key(const std::string& client_key) {
-    std::string concat = client_key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-    SHA1 sha;
-    sha.update(reinterpret_cast<const uint8_t*>(concat.data()), concat.size());
-    return base64_encode(sha.digest());
-}
-
-inline std::string trim(const std::string& s) {
-    auto start = s.find_first_not_of(" \t\r\n");
-    if (start == std::string::npos) return "";
-    auto end = s.find_last_not_of(" \t\r\n");
-    return s.substr(start, end - start + 1);
+    std::string input = client_key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+    unsigned char hash[SHA_DIGEST_LENGTH];
+    SHA1((const unsigned char*)input.c_str(), input.size(), hash);
+    return base64_encode(hash, SHA_DIGEST_LENGTH);
 }
 
 inline std::string find_header(const std::string& request, const std::string& name) {
     std::string search = name + ": ";
-    auto pos = request.find(search);
+    size_t pos = request.find(search);
     if (pos == std::string::npos) return "";
     pos += search.size();
-    auto end = request.find("\r\n", pos);
-    return trim(request.substr(pos, end - pos));
+    size_t end = request.find("\r\n", pos);
+    std::string val = request.substr(pos, end - pos);
+    size_t start = val.find_first_not_of(" \t");
+    if (start == std::string::npos) return "";
+    size_t last = val.find_last_not_of(" \t\r\n");
+    return val.substr(start, last - start + 1);
 }
 
 struct Frame {
@@ -148,7 +90,7 @@ inline void send_frame(int fd, uint8_t opcode, const std::string& payload) {
     frame.push_back(0x80 | opcode);
 
     if (payload.size() < 126) {
-        frame.push_back(static_cast<uint8_t>(payload.size()));
+        frame.push_back((uint8_t)payload.size());
     } else if (payload.size() <= 0xFFFF) {
         frame.push_back(126);
         frame.push_back((payload.size() >> 8) & 0xFF);

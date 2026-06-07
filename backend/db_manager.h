@@ -1,16 +1,16 @@
 #pragma once
 #include <string>
-#include <unordered_map>
+#include <map>
 #include <vector>
 
 struct DBManager {
-    std::unordered_map<std::string, std::string> store;
+    std::map<std::string, std::string> store;
 
     struct OpenFile {
         std::string path;
         int flags;
     };
-    std::unordered_map<int, OpenFile> fds;
+    std::map<int, OpenFile> fds;
     int next_fd = 3;
 
     void connect() {}
@@ -21,27 +21,26 @@ struct DBManager {
     }
 
     std::string read_file(const std::string& path) {
-        auto it = store.find(path);
-        if (it == store.end()) return "";
-        return it->second;
+        if (store.find(path) == store.end()) return "";
+        return store[path];
     }
 
     bool file_exists(const std::string& path) {
-        return store.count(path) > 0;
+        return store.find(path) != store.end();
     }
 
     bool delete_file(const std::string& path) {
-        auto it = store.find(path);
-        if (it == store.end()) return false;
-        store.erase(it);
+        if (store.find(path) == store.end()) return false;
+        store.erase(path);
         return true;
     }
 
     std::vector<std::string> list_files() {
         std::vector<std::string> out;
-        out.reserve(store.size());
-        for (auto& [k, _] : store)
-            out.push_back(k);
+        for (std::map<std::string, std::string>::iterator it = store.begin();
+             it != store.end(); it++) {
+            out.push_back(it->first);
+        }
         return out;
     }
 
@@ -56,15 +55,13 @@ struct DBManager {
     }
 
     std::string fd_read(int fd) {
-        auto it = fds.find(fd);
-        if (it == fds.end()) return "";
-        return read_file(it->second.path);
+        if (fds.find(fd) == fds.end()) return "";
+        return read_file(fds[fd].path);
     }
 
     int fd_write(int fd, const std::string& data) {
-        auto it = fds.find(fd);
-        if (it == fds.end()) return -1;
-        save_file(it->second.path, data);
+        if (fds.find(fd) == fds.end()) return -1;
+        save_file(fds[fd].path, data);
         return data.size();
     }
 
@@ -73,6 +70,6 @@ struct DBManager {
     }
 
     bool fd_valid(int fd) {
-        return fds.count(fd) > 0;
+        return fds.find(fd) != fds.end();
     }
 };

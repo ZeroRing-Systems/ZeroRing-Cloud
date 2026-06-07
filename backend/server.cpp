@@ -17,26 +17,28 @@ static int create_listener(int port) {
     int opt = 1;
     setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
-    sockaddr_in addr{};
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;
     addr.sin_port = htons(port);
 
-    if (bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
+    if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
         std::cerr << "bind failed on port " << port << "\n";
         close(fd);
-        std::exit(1);
+        exit(1);
     }
     if (listen(fd, 4) < 0) {
         std::cerr << "listen failed\n";
         close(fd);
-        std::exit(1);
+        exit(1);
     }
     return fd;
 }
 
 static bool do_handshake(int client) {
-    char buf[4096]{};
+    char buf[4096];
+    memset(buf, 0, sizeof(buf));
     int n = recv(client, buf, sizeof(buf) - 1, 0);
     if (n <= 0) return false;
 
@@ -55,27 +57,27 @@ static bool do_handshake(int client) {
     return true;
 }
 
-static std::string extract_json_value(const std::string& json, const std::string& key) {
+static std::string get_json_value(const std::string& json, const std::string& key) {
     std::string search = "\"" + key + "\":\"";
-    auto pos = json.find(search);
+    size_t pos = json.find(search);
     if (pos == std::string::npos) {
         search = "\"" + key + "\":";
         pos = json.find(search);
         if (pos == std::string::npos) return "";
         pos += search.size();
-        auto end = pos;
+        size_t end = pos;
         while (end < json.size() && json[end] != ',' && json[end] != '}') end++;
         return json.substr(pos, end - pos);
     }
     pos += search.size();
-    auto end = json.find("\"", pos);
+    size_t end = json.find("\"", pos);
     if (end == std::string::npos) return "";
     return json.substr(pos, end - pos);
 }
 
-static std::string handle_syscall(const std::string& payload) {
-    std::string action = extract_json_value(payload, "action");
-    std::string file = extract_json_value(payload, "file");
+static std::string handle_request(const std::string& payload) {
+    std::string action = get_json_value(payload, "action");
+    std::string file = get_json_value(payload, "file");
 
     std::lock_guard<std::mutex> lock(db_mutex);
 
@@ -87,7 +89,7 @@ static std::string handle_syscall(const std::string& payload) {
     }
 
     if (action == "write_file") {
-        std::string data = extract_json_value(payload, "data");
+        std::string data = get_json_value(payload, "data");
         db.save_file(file, data);
         return "{\"status\":\"ok\"}";
     }
@@ -99,10 +101,10 @@ static std::string handle_syscall(const std::string& payload) {
     }
 
     if (action == "list_files") {
-        auto files = db.list_files();
+        std::vector<std::string> files = db.list_files();
         std::string arr = "[";
         for (size_t i = 0; i < files.size(); i++) {
-            if (i) arr += ",";
+            if (i > 0) arr += ",";
             arr += "\"" + files[i] + "\"";
         }
         arr += "]";
@@ -110,7 +112,7 @@ static std::string handle_syscall(const std::string& payload) {
     }
 
     if (action == "open") {
-        std::string flags_str = extract_json_value(payload, "flags");
+        std::string flags_str = get_json_value(payload, "flags");
         int flags = 0;
         if (!flags_str.empty()) flags = std::stoi(flags_str);
         int fd = db.open_file(file, flags);
@@ -120,7 +122,7 @@ static std::string handle_syscall(const std::string& payload) {
     }
 
     if (action == "fd_read") {
-        std::string fd_str = extract_json_value(payload, "fd");
+        std::string fd_str = get_json_value(payload, "fd");
         if (fd_str.empty())
             return "{\"status\":\"error\",\"message\":\"missing fd\"}";
         int fd = std::stoi(fd_str);
@@ -131,11 +133,11 @@ static std::string handle_syscall(const std::string& payload) {
     }
 
     if (action == "fd_write") {
-        std::string fd_str = extract_json_value(payload, "fd");
+        std::string fd_str = get_json_value(payload, "fd");
         if (fd_str.empty())
             return "{\"status\":\"error\",\"message\":\"missing fd\"}";
         int fd = std::stoi(fd_str);
-        std::string data = extract_json_value(payload, "data");
+        std::string data = get_json_value(payload, "data");
         int n = db.fd_write(fd, data);
         if (n < 0)
             return "{\"status\":\"error\",\"message\":\"bad fd\"}";
@@ -143,7 +145,7 @@ static std::string handle_syscall(const std::string& payload) {
     }
 
     if (action == "close") {
-        std::string fd_str = extract_json_value(payload, "fd");
+        std::string fd_str = get_json_value(payload, "fd");
         if (fd_str.empty())
             return "{\"status\":\"error\",\"message\":\"missing fd\"}";
         int fd = std::stoi(fd_str);
@@ -168,7 +170,7 @@ static void handle_client(int client) {
             break;
 
         if (frame.opcode == 0x1) {
-            std::string response = handle_syscall(frame.payload);
+            std::string response = handle_request(frame.payload);
             ws::send_frame(client, 0x1, response);
         }
 
@@ -190,9 +192,9 @@ int main() {
     std::cout << "ws://localhost:" << port << "\n";
 
     while (true) {
-        sockaddr_in client_addr{};
+        struct sockaddr_in client_addr;
         socklen_t client_len = sizeof(client_addr);
-        int client = accept(listener, reinterpret_cast<sockaddr*>(&client_addr), &client_len);
+        int client = accept(listener, (struct sockaddr*)&client_addr, &client_len);
         if (client < 0) continue;
         std::thread(handle_client, client).detach();
     }
