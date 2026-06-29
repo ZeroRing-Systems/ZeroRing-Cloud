@@ -1,21 +1,9 @@
-// ============================================================================
-// json_util.h — Minimal JSON parser/builder for WebSocket command protocol
-// ============================================================================
-// Intentionally dependency-free: no nlohmann, no rapidjson.
-// Handles the flat { "key": "value" } objects used by the ZeroRing protocol.
-// ============================================================================
 #pragma once
 #include <string>
 #include <map>
 
 namespace json {
 
-// ---------------------------------------------------------------------------
-// Parse a flat JSON object: {"key1":"val1","key2":"val2",...}
-// Returns key-value map. Supports only string values (sufficient for our
-// command protocol). Ignores whitespace. Does NOT handle nested objects,
-// arrays, or escapes beyond \" — by design.
-// ---------------------------------------------------------------------------
 inline std::map<std::string, std::string> parse(const std::string& input) {
     std::map<std::string, std::string> result;
     size_t i = 0;
@@ -23,7 +11,7 @@ inline std::map<std::string, std::string> parse(const std::string& input) {
     auto read_string = [&]() -> std::string {
         std::string s;
         if (i >= input.size() || input[i] != '"') return s;
-        i++; // skip opening quote
+        i++;
         while (i < input.size() && input[i] != '"') {
             if (input[i] == '\\' && i + 1 < input.size()) {
                 i++;
@@ -37,13 +25,13 @@ inline std::map<std::string, std::string> parse(const std::string& input) {
             }
             i++;
         }
-        if (i < input.size()) i++; // skip closing quote
+        if (i < input.size()) i++;
         return s;
     };
 
     skip_ws();
     if (i >= input.size() || input[i] != '{') return result;
-    i++; // skip '{'
+    i++;
 
     while (i < input.size()) {
         skip_ws();
@@ -60,15 +48,11 @@ inline std::map<std::string, std::string> parse(const std::string& input) {
     return result;
 }
 
-// ---------------------------------------------------------------------------
-// Build a JSON response string
-// ---------------------------------------------------------------------------
 inline std::string ok(const std::string& data) {
     return "{\"status\":\"ok\",\"data\":\"" + data + "\"}";
 }
 
 inline std::string ok_raw(const std::string& data) {
-    // data is already valid JSON (array, object, etc.)
     return "{\"status\":\"ok\",\"data\":" + data + "}";
 }
 
@@ -76,7 +60,6 @@ inline std::string error(const std::string& msg) {
     return "{\"status\":\"error\",\"msg\":\"" + msg + "\"}";
 }
 
-// Build a JSON array of strings: ["a","b","c"]
 inline std::string array(const std::vector<std::string>& items) {
     std::string out = "[";
     for (size_t i = 0; i < items.size(); i++) {
@@ -87,4 +70,4 @@ inline std::string array(const std::vector<std::string>& items) {
     return out;
 }
 
-} // namespace json
+}

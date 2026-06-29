@@ -1,11 +1,3 @@
-// ============================================================================
-// terminal.js — Browser-side terminal emulator for ZeroRing OS
-// ============================================================================
-// This file bootstraps the WASM kernel, provides the HAL import functions,
-// manages WebSocket communication with ZeroRing-Cloud, and renders the
-// terminal UI.
-// ============================================================================
-
 const terminal = document.getElementById("terminal");
 const output   = document.getElementById("output");
 const inputLine = document.getElementById("input-line");
@@ -16,11 +8,6 @@ let mem;
 let wasmInstance;
 let currentPrompt = "$ ";
 
-// ---------------------------------------------------------------------------
-// WASM memory helpers
-// ---------------------------------------------------------------------------
-
-/** Read a NUL-terminated C string from WASM linear memory. */
 function readCStr(ptr) {
     const bytes = new Uint8Array(mem.buffer);
     let str = "";
@@ -31,12 +18,7 @@ function readCStr(ptr) {
     return str;
 }
 
-/**
- * Write a JS string into WASM linear memory as a NUL-terminated C string.
- * Uses a scratch region at the end of the initial memory page.
- * Returns the pointer (offset) into WASM memory.
- */
-const SCRATCH_OFFSET = 64 * 1024; // 64 KiB into the memory — safe for small strings
+const SCRATCH_OFFSET = 64 * 1024;
 
 function writeCStr(jsString) {
     const bytes = new Uint8Array(mem.buffer);
@@ -46,10 +28,6 @@ function writeCStr(jsString) {
     bytes[SCRATCH_OFFSET + Math.min(jsString.length, 4095)] = 0;
     return SCRATCH_OFFSET;
 }
-
-// ---------------------------------------------------------------------------
-// Terminal output
-// ---------------------------------------------------------------------------
 
 function printLine(text) {
     if (text === "\x1b[clear]") {
@@ -61,10 +39,6 @@ function printLine(text) {
     output.appendChild(div);
     terminal.scrollTop = terminal.scrollHeight;
 }
-
-// ---------------------------------------------------------------------------
-// WebSocket connection to ZeroRing-Cloud backend
-// ---------------------------------------------------------------------------
 
 let ws = null;
 let wsReconnectTimer = null;
@@ -78,12 +52,10 @@ function connectWebSocket() {
     };
 
     ws.onmessage = function (e) {
-        // Route the response through the kernel's handler if available.
         if (wasmInstance && wasmInstance.exports.handle_net_response) {
             const ptr = writeCStr(e.data);
             wasmInstance.exports.handle_net_response(ptr);
         } else {
-            // Fallback: print raw
             printLine(e.data);
         }
     };
@@ -100,10 +72,6 @@ function connectWebSocket() {
 }
 
 connectWebSocket();
-
-// ---------------------------------------------------------------------------
-// WASM import object — these are the functions the kernel calls via the HAL
-// ---------------------------------------------------------------------------
 
 const imports = {
     env: {
@@ -134,10 +102,6 @@ const imports = {
         },
     },
 };
-
-// ---------------------------------------------------------------------------
-// Keyboard input handling
-// ---------------------------------------------------------------------------
 
 function feedKey(code) {
     if (wasmInstance && wasmInstance.exports.handle_key) {
@@ -173,10 +137,6 @@ document.addEventListener("keydown", function (e) {
 terminal.addEventListener("click", function () {
     terminal.focus();
 });
-
-// ---------------------------------------------------------------------------
-// WASM bootstrap
-// ---------------------------------------------------------------------------
 
 WebAssembly.instantiateStreaming(fetch("wasm/kernel.wasm"), imports)
     .then(function (result) {

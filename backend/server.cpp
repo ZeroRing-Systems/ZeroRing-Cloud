@@ -1,25 +1,3 @@
-// ============================================================================
-// server.cpp — ZeroRing-Cloud WebSocket Server
-// ============================================================================
-// Acts as the bridge between the browser-based ZeroKernel and the persistent
-// storage layer (PostgreSQL or in-memory VFS).
-//
-// Protocol:
-//   Client sends:  {"cmd":"ls","path":"/"}
-//   Server returns: {"status":"ok","data":["dir1/","file.txt"]}
-//
-// Supported commands:
-//   ls    — List directory contents
-//   mkdir — Create a directory
-//   cat   — Read file contents
-//   save  — Write/overwrite a file
-//   rm    — Remove a file or empty directory
-//   ping  — Health check
-//
-// Threading model:
-//   One thread per WebSocket client (detached). Each thread has its own
-//   scope but shares the DBManager (which is internally mutex-protected).
-// ============================================================================
 #include <iostream>
 #include <cstring>
 #include <string>
@@ -32,14 +10,8 @@
 #include "db_manager.h"
 #include "json_util.h"
 
-// ---------------------------------------------------------------------------
-// Global database instance (thread-safe via internal mutex)
-// ---------------------------------------------------------------------------
 static DBManager db;
 
-// ---------------------------------------------------------------------------
-// TCP listener setup
-// ---------------------------------------------------------------------------
 static int create_listener(int port) {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) {
@@ -70,9 +42,6 @@ static int create_listener(int port) {
     return fd;
 }
 
-// ---------------------------------------------------------------------------
-// WebSocket handshake
-// ---------------------------------------------------------------------------
 static bool do_handshake(int client) {
     char buf[4096];
     memset(buf, 0, sizeof(buf));
@@ -94,9 +63,6 @@ static bool do_handshake(int client) {
     return true;
 }
 
-// ---------------------------------------------------------------------------
-// Format a VFS directory listing as a human-readable string
-// ---------------------------------------------------------------------------
 static std::string format_ls(const std::vector<VFSEntry>& entries) {
     if (entries.empty()) return "(empty directory)";
 
@@ -112,14 +78,10 @@ static std::string format_ls(const std::vector<VFSEntry>& entries) {
             out += "\n";
         }
     }
-    // Remove trailing newline
     if (!out.empty() && out.back() == '\n') out.pop_back();
     return out;
 }
 
-// ---------------------------------------------------------------------------
-// Command router — parses JSON and dispatches to DBManager
-// ---------------------------------------------------------------------------
 static std::string route_command(const std::string& raw) {
     auto obj = json::parse(raw);
 
@@ -129,19 +91,16 @@ static std::string route_command(const std::string& raw) {
     }
     const std::string& cmd = it_cmd->second;
 
-    // ---- ping ----
     if (cmd == "ping") {
         return json::ok("pong");
     }
 
-    // ---- ls ----
     if (cmd == "ls") {
         std::string path = obj.count("path") ? obj["path"] : "/";
         auto entries = db.list_dir(path);
         return format_ls(entries);
     }
 
-    // ---- mkdir ----
     if (cmd == "mkdir") {
         if (!obj.count("path")) return json::error("mkdir: missing 'path'");
         if (db.make_dir(obj["path"])) {
@@ -150,7 +109,6 @@ static std::string route_command(const std::string& raw) {
         return "mkdir: failed to create " + obj["path"];
     }
 
-    // ---- cat (read file) ----
     if (cmd == "cat") {
         if (!obj.count("path")) return json::error("cat: missing 'path'");
         std::string content = db.read_file(obj["path"]);
@@ -160,7 +118,6 @@ static std::string route_command(const std::string& raw) {
         return content;
     }
 
-    // ---- save (write file) ----
     if (cmd == "save") {
         if (!obj.count("path")) return json::error("save: missing 'path'");
         std::string data = obj.count("data") ? obj["data"] : "";
@@ -170,7 +127,6 @@ static std::string route_command(const std::string& raw) {
         return "save: failed to write " + obj["path"];
     }
 
-    // ---- rm ----
     if (cmd == "rm") {
         if (!obj.count("path")) return json::error("rm: missing 'path'");
         if (db.remove(obj["path"])) {
@@ -182,9 +138,6 @@ static std::string route_command(const std::string& raw) {
     return "unknown command: " + cmd;
 }
 
-// ---------------------------------------------------------------------------
-// Per-client connection handler (runs in its own thread)
-// ---------------------------------------------------------------------------
 static void handle_client(int client) {
     if (!do_handshake(client)) {
         close(client);
@@ -196,16 +149,13 @@ static void handle_client(int client) {
     while (true) {
         ws::Frame frame = ws::decode_frame(client);
 
-        // Connection closed or error
         if (frame.opcode == 0x8 || frame.opcode == 0x0) break;
 
-        // Text frame — route the command
         if (frame.opcode == 0x1) {
             std::string response = route_command(frame.payload);
             ws::send_frame(client, 0x1, response);
         }
 
-        // Ping → Pong
         if (frame.opcode == 0x9) {
             ws::send_frame(client, 0xA, frame.payload);
         }
@@ -215,13 +165,9 @@ static void handle_client(int client) {
     close(client);
 }
 
-// ---------------------------------------------------------------------------
-// Entry point
-// ---------------------------------------------------------------------------
 int main() {
     const int port = 8080;
 
-    // Connect to database (or in-memory fallback)
     std::string conninfo;
     const char* env = std::getenv("ZERORING_DB");
     if (env) conninfo = env;
@@ -231,13 +177,11 @@ int main() {
     }
     db.init_schema();
 
-    // Start listening
     int listener = create_listener(port);
     if (listener < 0) return 1;
 
     std::cerr << "[server] listening on ws://localhost:" << port << "\n";
 
-    // Accept loop
     while (true) {
         struct sockaddr_in client_addr{};
         socklen_t client_len = sizeof(client_addr);

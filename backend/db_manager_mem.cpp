@@ -1,13 +1,3 @@
-// ============================================================================
-// db_manager_mem.cpp — In-memory Virtual Filesystem (development fallback)
-// ============================================================================
-// Compiled when USE_POSTGRES is NOT defined. Provides a fully functional
-// hierarchical VFS backed by std::map, so the entire system can run without
-// a database server during development.
-//
-// The tree structure mirrors what PostgreSQL would store:
-//   Node { name, is_dir, children (if dir), data (if file) }
-// ============================================================================
 #ifndef USE_POSTGRES
 
 #include "db_manager.h"
@@ -15,14 +5,11 @@
 #include <iostream>
 #include <mutex>
 
-// ---------------------------------------------------------------------------
-// VFS Node — recursive tree
-// ---------------------------------------------------------------------------
 struct VFSNode {
     std::string name;
     bool        is_dir;
-    std::string data;                            // file contents (empty for dirs)
-    std::map<std::string, VFSNode*> children;    // only for directories
+    std::string data;
+    std::map<std::string, VFSNode*> children;
 
     VFSNode(const std::string& n, bool dir) : name(n), is_dir(dir) {}
 
@@ -31,9 +18,6 @@ struct VFSNode {
     }
 };
 
-// ---------------------------------------------------------------------------
-// Path utilities
-// ---------------------------------------------------------------------------
 namespace path_util {
 
 static std::vector<std::string> split(const std::string& path) {
@@ -63,11 +47,8 @@ static std::string basename(const std::string& path) {
     return path.substr(pos + 1);
 }
 
-} // namespace path_util
+}
 
-// ---------------------------------------------------------------------------
-// Implementation
-// ---------------------------------------------------------------------------
 struct DBManager::Impl {
     VFSNode* root;
     std::mutex mtx;
@@ -75,7 +56,6 @@ struct DBManager::Impl {
     Impl() : root(new VFSNode("/", true)) {}
     ~Impl() { delete root; }
 
-    // Walk the tree. Returns nullptr if path doesn't exist.
     VFSNode* resolve(const std::string& path) {
         auto parts = path_util::split(path);
         VFSNode* cur = root;
@@ -87,7 +67,6 @@ struct DBManager::Impl {
         return cur;
     }
 
-    // Resolve parent directory + return basename
     VFSNode* resolve_parent(const std::string& path, std::string& out_name) {
         out_name = path_util::basename(path);
         std::string par = path_util::parent(path);
@@ -103,7 +82,7 @@ DBManager::~DBManager() {
     delete impl_;
 }
 
-bool DBManager::connect(const std::string& /* conninfo */) {
+bool DBManager::connect(const std::string&) {
     std::cerr << "[db] using in-memory filesystem (no PostgreSQL)\n";
     return true;
 }
@@ -138,7 +117,7 @@ bool DBManager::make_dir(const std::string& path) {
     std::string name;
     VFSNode* parent = impl_->resolve_parent(path, name);
     if (!parent) return false;
-    if (parent->children.count(name)) return false; // already exists
+    if (parent->children.count(name)) return false;
 
     parent->children[name] = new VFSNode(name, true);
     return true;
@@ -159,11 +138,9 @@ bool DBManager::write_file(const std::string& path, const std::string& data) {
 
     auto it = parent->children.find(name);
     if (it != parent->children.end()) {
-        // Overwrite existing file
         if (it->second->is_dir) return false;
         it->second->data = data;
     } else {
-        // Create new file
         auto* node = new VFSNode(name, false);
         node->data = data;
         parent->children[name] = node;
@@ -180,7 +157,6 @@ bool DBManager::remove(const std::string& path) {
     auto it = parent->children.find(name);
     if (it == parent->children.end()) return false;
 
-    // Don't allow removing non-empty directories
     if (it->second->is_dir && !it->second->children.empty()) return false;
 
     delete it->second;
@@ -193,4 +169,4 @@ bool DBManager::exists(const std::string& path) {
     return impl_->resolve(path) != nullptr;
 }
 
-#endif // !USE_POSTGRES
+#endif
