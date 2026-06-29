@@ -1,14 +1,27 @@
+// ============================================================================
+// terminal.js — Browser-side terminal emulator for ZeroRing OS
+// ============================================================================
+// This file bootstraps the WASM kernel, provides the HAL import functions,
+// manages WebSocket communication with ZeroRing-Cloud, and renders the
+// terminal UI.
+// ============================================================================
+
 const terminal = document.getElementById("terminal");
-const output = document.getElementById("output");
+const output   = document.getElementById("output");
 const inputLine = document.getElementById("input-line");
-const promptEl = document.getElementById("prompt");
-const cmdInput = document.getElementById("cmd");
+const promptEl  = document.getElementById("prompt");
+const cmdInput  = document.getElementById("cmd");
 
 let mem;
 let wasmInstance;
 let currentPrompt = "$ ";
 
-function readStr(ptr) {
+// ---------------------------------------------------------------------------
+// WASM memory helpers
+// ---------------------------------------------------------------------------
+
+/** Read a NUL-terminated C string from WASM linear memory. */
+function readCStr(ptr) {
     const bytes = new Uint8Array(mem.buffer);
     let str = "";
     while (bytes[ptr]) {
@@ -18,7 +31,27 @@ function readStr(ptr) {
     return str;
 }
 
-function print(text) {
+/**
+ * Write a JS string into WASM linear memory as a NUL-terminated C string.
+ * Uses a scratch region at the end of the initial memory page.
+ * Returns the pointer (offset) into WASM memory.
+ */
+const SCRATCH_OFFSET = 64 * 1024; // 64 KiB into the memory — safe for small strings
+
+function writeCStr(jsString) {
+    const bytes = new Uint8Array(mem.buffer);
+    for (let i = 0; i < jsString.length && i < 4095; i++) {
+        bytes[SCRATCH_OFFSET + i] = jsString.charCodeAt(i);
+    }
+    bytes[SCRATCH_OFFSET + Math.min(jsString.length, 4095)] = 0;
+    return SCRATCH_OFFSET;
+}
+
+// ---------------------------------------------------------------------------
+// Terminal output
+// ---------------------------------------------------------------------------
+
+function printLine(text) {
     if (text === "\x1b[clear]") {
         output.innerHTML = "";
         return;
@@ -29,26 +62,82 @@ function print(text) {
     terminal.scrollTop = terminal.scrollHeight;
 }
 
-let ws = new WebSocket("ws://localhost:8080");
+// ---------------------------------------------------------------------------
+// WebSocket connection to ZeroRing-Cloud backend
+// ---------------------------------------------------------------------------
 
-ws.onmessage = function (e) {
-    print(e.data);
-};
+let ws = null;
+let wsReconnectTimer = null;
+
+function connectWebSocket() {
+    const wsUrl = `ws://${location.hostname || "localhost"}:8080`;
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = function () {
+        console.log("[ZeroRing] WebSocket connected to", wsUrl);
+    };
+
+    ws.onmessage = function (e) {
+        // Route the response through the kernel's handler if available.
+        if (wasmInstance && wasmInstance.exports.handle_net_response) {
+            const ptr = writeCStr(e.data);
+            wasmInstance.exports.handle_net_response(ptr);
+        } else {
+            // Fallback: print raw
+            printLine(e.data);
+        }
+    };
+
+    ws.onclose = function () {
+        console.warn("[ZeroRing] WebSocket disconnected. Reconnecting in 3s...");
+        wsReconnectTimer = setTimeout(connectWebSocket, 3000);
+    };
+
+    ws.onerror = function (err) {
+        console.error("[ZeroRing] WebSocket error:", err);
+        ws.close();
+    };
+}
+
+connectWebSocket();
+
+// ---------------------------------------------------------------------------
+// WASM import object — these are the functions the kernel calls via the HAL
+// ---------------------------------------------------------------------------
 
 const imports = {
     env: {
-        js_print_text: function (p) {
-            print(readStr(p));
+        js_print: function (ptr) {
+            printLine(readCStr(ptr));
         },
-        js_set_prompt: function (p) {
-            currentPrompt = readStr(p);
+
+        js_set_prompt: function (ptr) {
+            currentPrompt = readCStr(ptr);
             promptEl.textContent = currentPrompt;
         },
-        js_network_request: function (p) {
-            if (ws.readyState === 1) ws.send(readStr(p));
+
+        js_clear_screen: function () {
+            output.innerHTML = "";
+        },
+
+        js_net_send: function (ptr) {
+            const json = readCStr(ptr);
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(json);
+            } else {
+                printLine("[net] error: not connected to backend");
+            }
+        },
+
+        js_log_error: function (ptr) {
+            console.error("[ZeroKernel]", readCStr(ptr));
         },
     },
 };
+
+// ---------------------------------------------------------------------------
+// Keyboard input handling
+// ---------------------------------------------------------------------------
 
 function feedKey(code) {
     if (wasmInstance && wasmInstance.exports.handle_key) {
@@ -60,7 +149,7 @@ document.addEventListener("keydown", function (e) {
     if (!wasmInstance) return;
 
     if (e.key === "Enter") {
-        print(currentPrompt + cmdInput.textContent);
+        printLine(currentPrompt + cmdInput.textContent);
         feedKey(13);
         cmdInput.textContent = "";
         e.preventDefault();
@@ -85,6 +174,10 @@ terminal.addEventListener("click", function () {
     terminal.focus();
 });
 
+// ---------------------------------------------------------------------------
+// WASM bootstrap
+// ---------------------------------------------------------------------------
+
 WebAssembly.instantiateStreaming(fetch("wasm/kernel.wasm"), imports)
     .then(function (result) {
         mem = result.instance.exports.memory;
@@ -93,5 +186,6 @@ WebAssembly.instantiateStreaming(fetch("wasm/kernel.wasm"), imports)
         inputLine.style.display = "flex";
     })
     .catch(function (e) {
-        print("boot failed: " + e);
+        printLine("boot failed: " + e);
+        console.error(e);
     });
