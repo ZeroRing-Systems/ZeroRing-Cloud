@@ -138,7 +138,7 @@ terminal.addEventListener("click", function () {
     terminal.focus();
 });
 
-WebAssembly.instantiateStreaming(fetch("wasm/kernel.wasm"), imports)
+WebAssembly.instantiateStreaming(fetch("wasm/kernel.wasm?v=" + Date.now()), imports)
     .then(function (result) {
         mem = result.instance.exports.memory;
         wasmInstance = result.instance;
