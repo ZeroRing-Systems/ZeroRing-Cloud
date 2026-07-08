@@ -69,13 +69,13 @@ static std::string format_ls(const std::vector<VFSEntry>& entries) {
     std::string out;
     for (auto& e : entries) {
         if (e.is_dir) {
-            out += e.name + "/\n";
+            out += "\033[1;34m" + e.name + "/\033[0m\n";
         } else {
-            out += e.name;
+            out += "\033[37m" + e.name;
             if (e.size >= 0) {
-                out += "  (" + std::to_string(e.size) + " bytes)";
+                out += "  \033[90m(" + std::to_string(e.size) + " bytes)\033[0m";
             }
-            out += "\n";
+            out += "\033[0m\n";
         }
     }
     if (!out.empty() && out.back() == '\n') out.pop_back();

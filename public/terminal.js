@@ -43,13 +43,71 @@ function syncWasmLine(text) {
     }
 }
 
+const ANSI_COLORS = {
+    "30": "#1e1e1e", "31": "#e06c75", "32": "#98c379", "33": "#e5c07b",
+    "34": "#61afef", "35": "#c678dd", "36": "#56b6c2", "37": "#abb2bf",
+    "90": "#5c6370", "91": "#e06c75", "92": "#98c379", "93": "#e5c07b",
+    "94": "#61afef", "95": "#c678dd", "96": "#56b6c2", "97": "#ffffff"
+};
+
+function ansiToHtml(text) {
+    let result = "";
+    let i = 0;
+    let openSpan = false;
+    while (i < text.length) {
+        if (text[i] === "\x1b" && text[i + 1] === "[") {
+            let j = i + 2;
+            let code = "";
+            while (j < text.length && text[j] !== "m") {
+                code += text[j];
+                j++;
+            }
+            if (j < text.length) {
+                j++;
+                const codes = code.split(";");
+                let color = null;
+                let bold = false;
+                for (const c of codes) {
+                    if (c === "0" || c === "") {
+                        if (openSpan) { result += "</span>"; openSpan = false; }
+                    } else if (c === "1") {
+                        bold = true;
+                    } else if (ANSI_COLORS[c]) {
+                        color = ANSI_COLORS[c];
+                    }
+                }
+                if (color) {
+                    if (openSpan) result += "</span>";
+                    const style = "color:" + color + (bold ? ";font-weight:bold" : "");
+                    result += '<span style="' + style + '">';
+                    openSpan = true;
+                }
+                i = j;
+                continue;
+            }
+        }
+        const ch = text[i];
+        if (ch === "<") result += "&lt;";
+        else if (ch === ">") result += "&gt;";
+        else if (ch === "&") result += "&amp;";
+        else result += ch;
+        i++;
+    }
+    if (openSpan) result += "</span>";
+    return result;
+}
+
 function printLine(text) {
     if (text === "\x1b[clear]") {
         output.innerHTML = "";
         return;
     }
     const div = document.createElement("div");
-    div.textContent = text;
+    if (text.includes("\x1b[")) {
+        div.innerHTML = ansiToHtml(text);
+    } else {
+        div.textContent = text;
+    }
     output.appendChild(div);
     terminal.scrollTop = terminal.scrollHeight;
 }
