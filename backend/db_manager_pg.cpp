@@ -184,7 +184,7 @@ std::string DBManager::read_file(const std::string& path) {
         txn.commit();
         if (r.empty()) return "";
         auto bv = r[0][0].as<pqxx::binarystring>();
-        return std::string(bv.data(), bv.size());
+        return std::string(reinterpret_cast<const char*>(bv.data()), bv.size());
     } catch (const std::exception& e) {
         std::cerr << "[db] read_file error: " << e.what() << "\n";
         return "";
