@@ -13,6 +13,18 @@ let historyIndex = -1;
 let savedInput = "";
 let pendingTabPrefix = null;
 let currentCwd = "/";
+let sessionId = localStorage.getItem("zeroring_session") || "";
+
+function generateSessionId() {
+    const arr = new Uint8Array(16);
+    crypto.getRandomValues(arr);
+    return Array.from(arr, function(b) { return b.toString(16).padStart(2, "0"); }).join("");
+}
+
+if (!sessionId) {
+    sessionId = generateSessionId();
+    localStorage.setItem("zeroring_session", sessionId);
+}
 
 function readCStr(ptr) {
     const bytes = new Uint8Array(mem.buffer);
@@ -121,9 +133,15 @@ function connectWebSocket() {
 
     ws.onopen = function () {
         console.log("[ZeroRing] WebSocket connected to", wsUrl);
+        ws.send(JSON.stringify({ session: sessionId }));
     };
 
     ws.onmessage = function (e) {
+        if (typeof e.data === "string" && e.data.startsWith("__session__")) {
+            sessionId = e.data.slice(11);
+            localStorage.setItem("zeroring_session", sessionId);
+            return;
+        }
         if (typeof e.data === "string" && e.data.startsWith("__complete__")) {
             handleTabResponse(e.data.slice(12));
             return;
