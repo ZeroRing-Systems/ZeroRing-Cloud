@@ -3,7 +3,7 @@ project(ZeroRingCloud LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-option(USE_POSTGRES "Link against libpqxx for PostgreSQL-backed VFS" OFF)
+option(USE_POSTGRES "Link against libpqxx for PostgreSQL-backed VFS" ON)
 
 add_executable(server
     backend/server.cpp
