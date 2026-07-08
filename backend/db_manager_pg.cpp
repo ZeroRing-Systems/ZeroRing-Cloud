@@ -22,14 +22,21 @@ static std::vector<std::string> split(const std::string& path) {
     return parts;
 }
 
-static std::string parent(const std::string& path) {
+static std::string clean_trailing(std::string p) {
+    while (p.size() > 1 && p.back() == '/') p.pop_back();
+    return p;
+}
+
+static std::string parent(const std::string& path_in) {
+    std::string path = clean_trailing(path_in);
     if (path == "/" || path.empty()) return "/";
     auto pos = path.rfind('/');
     if (pos == 0 || pos == std::string::npos) return "/";
     return path.substr(0, pos);
 }
 
-static std::string basename(const std::string& path) {
+static std::string basename(const std::string& path_in) {
+    std::string path = clean_trailing(path_in);
     auto pos = path.rfind('/');
     if (pos == std::string::npos) return path;
     return path.substr(pos + 1);
