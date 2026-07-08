@@ -1,49 +1,250 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ZeroRing OS</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono&display=swap" rel="stylesheet">
     <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      body {
-        background: #0a0a0a;
-        color: #c8c8c8;
-        font-family: "Courier New", monospace;
-        font-size: 14px;
-        height: 100vh;
-        overflow: hidden;
-      }
-      #terminal {
-        height: 100vh;
-        padding: 12px;
-        overflow-y: auto;
-        outline: none;
-      }
-      #output div { white-space: pre-wrap; line-height: 1.5; }
-      #input-line {
-        display: none;
-        align-items: center;
-        line-height: 1.5;
-        white-space: pre-wrap;
-      }
-      #prompt { color: #5faf5f; white-space: pre-wrap; }
-      #cmd { color: #c8c8c8; white-space: pre-wrap; }
-      #cursor {
-        display: inline-block;
-        width: 7px;
-        height: 14px;
-        background: #c8c8c8;
-        animation: blink 1s step-end infinite;
-        vertical-align: text-bottom;
-      }
-      @keyframes blink { 50% { opacity: 0; } }
+        :root {
+            --bg: #0a0a0c;
+            --surface: #13141a;
+            --primary: #5e6ad2;
+            --primary-hover: #7380f3;
+            --text: #f0f0f5;
+            --text-dim: #a0a0b0;
+            --border: #232533;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        header {
+            padding: 2rem 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-weight: 800;
+            font-size: 1.5rem;
+            letter-spacing: -0.5px;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, var(--primary), #a8b1ff);
+            border-radius: 8px;
+            display: inline-block;
+        }
+
+        .hero {
+            padding: 8rem 0 6rem;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 4rem;
+            font-weight: 800;
+            line-height: 1.1;
+            margin: 0 0 1.5rem 0;
+            letter-spacing: -1.5px;
+        }
+
+        .gradient-text {
+            background: linear-gradient(to right, #fff, #8a96ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            font-size: 1.25rem;
+            color: var(--text-dim);
+            max-width: 600px;
+            margin: 0 0 3rem 0;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background-color: var(--primary);
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.125rem;
+            transition: all 0.2s;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 24px rgba(94, 106, 210, 0.25);
+        }
+
+        .btn:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 12px 32px rgba(94, 106, 210, 0.35);
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            padding: 4rem 0;
+        }
+
+        .feature-card {
+            background-color: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 2rem;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-4px);
+            border-color: var(--primary);
+        }
+
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        .feature-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 0 0 0.5rem 0;
+        }
+
+        .feature-desc {
+            color: var(--text-dim);
+            margin: 0;
+            font-size: 0.95rem;
+        }
+
+        .window {
+            background-color: #000;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto 4rem;
+            box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+        }
+
+        .window-header {
+            background-color: var(--surface);
+            padding: 0.75rem 1rem;
+            display: flex;
+            gap: 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        .dot.red { background-color: #ff5f56; }
+        .dot.yellow { background-color: #ffbd2e; }
+        .dot.green { background-color: #27c93f; }
+
+        .window-content {
+            padding: 2rem;
+            font-family: 'JetBrains Mono', monospace;
+            color: #fff;
+            text-align: left;
+            font-size: 0.9rem;
+        }
+
+        .prompt { color: #a8b1ff; }
+        .command { color: #fff; }
+        .output { color: #a0a0b0; margin-bottom: 1rem; display: block; }
+
     </style>
-  </head>
-  <body>
-    <div id="terminal" tabindex="0">
-      <div id="output"></div>
-      <div id="input-line"><span id="prompt">$ </span><span id="cmd"></span><span id="cursor"></span></div>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <div class="logo-icon"></div>
+                ZeroRing
+            </div>
+            <a href="https://github.com/ZeroRing-Systems" target="_blank" style="color: var(--text-dim); text-decoration: none;">GitHub</a>
+        </header>
+
+        <main class="hero">
+            <h1>The Operating System<br><span class="gradient-text">for the Web</span></h1>
+            <p class="subtitle">A full-stack, WebAssembly-powered micro-kernel OS that runs directly in your browser. Persistent storage, zero-dependency C++ backend, and a unified shell experience.</p>
+            
+            <div class="window">
+                <div class="window-header">
+                    <div class="dot red"></div>
+                    <div class="dot yellow"></div>
+                    <div class="dot green"></div>
+                </div>
+                <div class="window-content">
+                    <span class="prompt">zeroring:/$</span> <span class="command">help</span><br>
+                    <span class="output">Available commands: help, version, whoami, pwd, echo, cd, ls, mkdir, cat, rm, write, edit, run</span>
+                    <span class="prompt">zeroring:/$</span> <span class="command">write hello.txt "Hello World!"</span><br>
+                    <span class="output">saved: hello.txt (12 bytes)</span>
+                    <span class="prompt">zeroring:/$</span> <span class="command">cat hello.txt</span><br>
+                    <span class="output">Hello World!</span>
+                    <span class="prompt">zeroring:/$</span> <span class="command _">_</span>
+                </div>
+            </div>
+
+            <a href="terminal.html" class="btn">
+                Launch Terminal
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            </a>
+        </main>
+
+        <div class="features">
+            <div class="feature-card">
+                <div class="feature-icon">🚀</div>
+                <h3 class="feature-title">WASM Kernel</h3>
+                <p class="feature-desc">A custom C++ kernel compiled to WebAssembly running at near-native speeds directly in your browser.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">💾</div>
+                <h3 class="feature-title">Persistent VFS</h3>
+                <p class="feature-desc">Multi-user persistent storage backed by PostgreSQL. Your files are isolated and securely saved across sessions.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">⚡</div>
+                <h3 class="feature-title">Real-time WebSocket</h3>
+                <p class="feature-desc">Zero-dependency C++ concurrent backend proxying kernel operations with ultra-low latency.</p>
+            </div>
+        </div>
     </div>
-    <script src="terminal.js?v=2"></script>
-  </body>
+</body>
 </html>

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>ZeroRing OS</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        background: #0a0a0a;
+        color: #c8c8c8;
+        font-family: "Courier New", monospace;
+        font-size: 14px;
+        height: 100vh;
+        overflow: hidden;
+      }
+      #terminal {
+        height: 100vh;
+        padding: 12px;
+        overflow-y: auto;
+        outline: none;
+      }
+      #output div { white-space: pre-wrap; line-height: 1.5; }
+      #input-line {
+        display: none;
+        align-items: center;
+        line-height: 1.5;
+        white-space: pre-wrap;
+      }
+      #prompt { color: #5faf5f; white-space: pre-wrap; }
+      #cmd { color: #c8c8c8; white-space: pre-wrap; }
+      #cursor {
+        display: inline-block;
+        width: 7px;
+        height: 14px;
+        background: #c8c8c8;
+        animation: blink 1s step-end infinite;
+        vertical-align: text-bottom;
+      }
+      @keyframes blink { 50% { opacity: 0; } }
+    </style>
+  </head>
+  <body>
+    <div id="terminal" tabindex="0">
+      <div id="output"></div>
+      <div id="input-line"><span id="prompt">$ </span><span id="cmd"></span><span id="cursor"></span></div>
+    </div>
+    <script src="terminal.js?v=2"></script>
+  </body>
+</html>
