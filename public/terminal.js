@@ -128,7 +128,15 @@ let ws = null;
 let wsReconnectTimer = null;
 
 function connectWebSocket() {
-    const wsUrl = `ws://${location.hostname || "localhost"}:8080`;
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    const host = location.hostname || "localhost";
+    const port = location.port;
+    let wsUrl;
+    if (!port || port === "80" || port === "443") {
+        wsUrl = proto + "//" + host + "/ws";
+    } else {
+        wsUrl = "ws://" + host + ":8080";
+    }
     ws = new WebSocket(wsUrl);
 
     ws.onopen = function () {
