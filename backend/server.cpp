@@ -130,7 +130,10 @@ static std::string route_command(const std::string& raw, const std::string& sess
 
     if (cmd == "ls") {
         std::string path = obj.count("path") ? obj["path"] : "/";
-        auto entries = db.list_dir(scope_path(session_id, path));
+        std::string scoped = scope_path(session_id, path);
+        std::cerr << "[debug] ls: path=" << path << " scoped=" << scoped << "\n";
+        auto entries = db.list_dir(scoped);
+        std::cerr << "[debug] ls: found " << entries.size() << " entries\n";
         return format_ls(entries);
     }
 
@@ -161,7 +164,9 @@ static std::string route_command(const std::string& raw, const std::string& sess
 
     if (cmd == "mkdir") {
         if (!obj.count("path")) return json::error("mkdir: missing 'path'");
-        if (db.make_dir(scope_path(session_id, obj["path"]))) {
+        std::string scoped = scope_path(session_id, obj["path"]);
+        std::cerr << "[debug] mkdir: path=" << obj["path"] << " scoped=" << scoped << "\n";
+        if (db.make_dir(scoped)) {
             return "mkdir: created " + obj["path"];
         }
         return "mkdir: failed to create " + obj["path"];
