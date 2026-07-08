@@ -240,6 +240,27 @@ document.addEventListener("keydown", function (e) {
         return;
     }
 
+    if (e.ctrlKey && e.key === "c") {
+        const selection = window.getSelection().toString();
+        if (selection) {
+            navigator.clipboard.writeText(selection);
+        } else {
+            navigator.clipboard.writeText(cmdInput.textContent);
+        }
+        e.preventDefault();
+        return;
+    }
+
+    if (e.ctrlKey && e.key === "v") {
+        e.preventDefault();
+        navigator.clipboard.readText().then(function (text) {
+            const clean = text.replace(/[\r\n]/g, "");
+            cmdInput.textContent += clean;
+            syncWasmLine(cmdInput.textContent);
+        });
+        return;
+    }
+
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
         feedKey(e.key.charCodeAt(0));
         cmdInput.textContent += e.key;
