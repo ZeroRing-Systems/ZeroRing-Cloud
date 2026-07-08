@@ -110,7 +110,7 @@ bool DBManager::init_schema() {
                 directory_id INTEGER NOT NULL REFERENCES directories(id) ON DELETE CASCADE,
                 owner_id    INTEGER REFERENCES users(id) DEFAULT 1,
                 name        VARCHAR(255) NOT NULL,
-                data        BYTEA DEFAULT '',
+                data        TEXT DEFAULT '',
                 size        BIGINT DEFAULT 0,
                 created_at  TIMESTAMPTZ DEFAULT NOW(),
                 updated_at  TIMESTAMPTZ DEFAULT NOW(),
@@ -183,8 +183,7 @@ std::string DBManager::read_file(const std::string& path) {
             "SELECT data FROM files WHERE directory_id = $1 AND name = $2", dir_id, name);
         txn.commit();
         if (r.empty()) return "";
-        auto bv = r[0][0].as<std::basic_string<std::byte>>();
-        return std::string(reinterpret_cast<const char*>(bv.data()), bv.size());
+        return r[0][0].as<std::string>();
     } catch (const std::exception& e) {
         std::cerr << "[db] read_file error: " << e.what() << "\n";
         return "";
@@ -202,14 +201,12 @@ bool DBManager::write_file(const std::string& path, const std::string& data) {
             std::cerr << "[db] write_file: parent dir not found for path=" << path << " parent=" << dir << "\n";
             return false;
         }
-        std::basic_string<std::byte> blob(
-            reinterpret_cast<const std::byte*>(data.data()), data.size());
         txn.exec_params(
             "INSERT INTO files (directory_id, name, data, size) "
             "VALUES ($1, $2, $3, $4) "
             "ON CONFLICT (directory_id, name) DO UPDATE "
             "SET data = EXCLUDED.data, size = EXCLUDED.size, updated_at = NOW()",
-            dir_id, name, blob, static_cast<int64_t>(data.size()));
+            dir_id, name, data, static_cast<int64_t>(data.size()));
         txn.commit();
         return true;
     } catch (const std::exception& e) {
