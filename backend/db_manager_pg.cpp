@@ -183,7 +183,7 @@ std::string DBManager::read_file(const std::string& path) {
             "SELECT data FROM files WHERE directory_id = $1 AND name = $2", dir_id, name);
         txn.commit();
         if (r.empty()) return "";
-        auto bv = r[0][0].as<pqxx::binarystring>();
+        auto bv = r[0][0].as<std::basic_string<std::byte>>();
         return std::string(reinterpret_cast<const char*>(bv.data()), bv.size());
     } catch (const std::exception& e) {
         std::cerr << "[db] read_file error: " << e.what() << "\n";
@@ -198,8 +198,12 @@ bool DBManager::write_file(const std::string& path, const std::string& data) {
         std::string dir = path_util::parent(path);
         std::string name = path_util::basename(path);
         int64_t dir_id = impl_->resolve_dir(txn, dir);
-        if (dir_id < 0) return false;
-        pqxx::binarystring blob(data.data(), data.size());
+        if (dir_id < 0) {
+            std::cerr << "[db] write_file: parent dir not found for path=" << path << " parent=" << dir << "\n";
+            return false;
+        }
+        std::basic_string<std::byte> blob(
+            reinterpret_cast<const std::byte*>(data.data()), data.size());
         txn.exec_params(
             "INSERT INTO files (directory_id, name, data, size) "
             "VALUES ($1, $2, $3, $4) "
