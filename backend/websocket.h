@@ -8,6 +8,8 @@
 #include <openssl/evp.h>
 #include <openssl/buffer.h>
 #include <sys/socket.h>
+#include <unistd.h>
+#include <cerrno>
 
 namespace ws {
 
@@ -45,6 +47,16 @@ inline std::string find_header(const std::string& request, const std::string& na
     return val.substr(start, last - start + 1);
 }
 
+static bool recv_exact(int fd, void* buf, size_t len) {
+    size_t total = 0;
+    while (total < len) {
+        ssize_t n = recv(fd, (char*)buf + total, len - total, 0);
+        if (n <= 0) return false;
+        total += n;
+    }
+    return true;
+}
+
 struct Frame {
     bool fin;
     uint8_t opcode;
@@ -54,7 +66,7 @@ struct Frame {
 inline Frame decode_frame(int fd) {
     Frame f{};
     uint8_t header[2];
-    if (recv(fd, header, 2, MSG_WAITALL) != 2) return f;
+    if (!recv_exact(fd, header, 2)) return f;
 
     f.fin = header[0] & 0x80;
     f.opcode = header[0] & 0x0F;
@@ -63,20 +75,27 @@ inline Frame decode_frame(int fd) {
 
     if (len == 126) {
         uint8_t ext[2];
-        recv(fd, ext, 2, MSG_WAITALL);
+        if (!recv_exact(fd, ext, 2)) return f;
         len = (ext[0] << 8) | ext[1];
     } else if (len == 127) {
         uint8_t ext[8];
-        recv(fd, ext, 8, MSG_WAITALL);
+        if (!recv_exact(fd, ext, 8)) return f;
         len = 0;
         for (int i = 0; i < 8; i++) len = (len << 8) | ext[i];
     }
 
     uint8_t mask[4] = {};
-    if (masked) recv(fd, mask, 4, MSG_WAITALL);
+    if (masked) {
+        if (!recv_exact(fd, mask, 4)) return f;
+    }
 
     f.payload.resize(len);
-    recv(fd, f.payload.data(), len, MSG_WAITALL);
+    if (len > 0) {
+        if (!recv_exact(fd, f.payload.data(), len)) {
+            f.opcode = 0;
+            return f;
+        }
+    }
 
     if (masked)
         for (uint64_t i = 0; i < len; i++)
@@ -102,7 +121,13 @@ inline void send_frame(int fd, uint8_t opcode, const std::string& payload) {
     }
 
     frame.insert(frame.end(), payload.begin(), payload.end());
-    send(fd, frame.data(), frame.size(), 0);
+
+    size_t total = 0;
+    while (total < frame.size()) {
+        ssize_t n = send(fd, frame.data() + total, frame.size() - total, MSG_NOSIGNAL);
+        if (n <= 0) break;
+        total += n;
+    }
 }
 
 }
