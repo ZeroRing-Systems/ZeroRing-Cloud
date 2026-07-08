@@ -285,6 +285,7 @@ function handleTabResponse(jsonArray) {
 }
 
 document.addEventListener("keydown", function (e) {
+    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
     if (!wasmInstance) return;
 
     if (e.key === "Tab") {
