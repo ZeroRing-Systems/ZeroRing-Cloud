@@ -101,6 +101,20 @@ static std::string route_command(const std::string& raw) {
         return format_ls(entries);
     }
 
+    if (cmd == "complete") {
+        std::string path = obj.count("path") ? obj["path"] : "/";
+        auto entries = db.list_dir(path);
+        std::string out = "__complete__[";
+        for (size_t i = 0; i < entries.size(); i++) {
+            if (i > 0) out += ",";
+            out += "\"" + entries[i].name;
+            if (entries[i].is_dir) out += "/";
+            out += "\"";
+        }
+        out += "]";
+        return out;
+    }
+
     if (cmd == "mkdir") {
         if (!obj.count("path")) return json::error("mkdir: missing 'path'");
         if (db.make_dir(obj["path"])) {

@@ -11,6 +11,8 @@ let currentPrompt = "$ ";
 const commandHistory = [];
 let historyIndex = -1;
 let savedInput = "";
+let pendingTabPrefix = null;
+let currentCwd = "/";
 
 function readCStr(ptr) {
     const bytes = new Uint8Array(mem.buffer);
@@ -64,6 +66,14 @@ function connectWebSocket() {
     };
 
     ws.onmessage = function (e) {
+        if (typeof e.data === "string" && e.data.startsWith("__complete__")) {
+            handleTabResponse(e.data.slice(12));
+            return;
+        }
+        if (typeof e.data === "string" && e.data.startsWith("__stat__")) {
+            handleStatResponse(e.data.slice(8));
+            return;
+        }
         if (wasmInstance && wasmInstance.exports.handle_net_response) {
             const ptr = writeCStr(e.data);
             wasmInstance.exports.handle_net_response(ptr);
@@ -94,6 +104,10 @@ const imports = {
         js_set_prompt: function (ptr) {
             currentPrompt = readCStr(ptr);
             promptEl.textContent = currentPrompt;
+            const match = currentPrompt.match(/zeroring:(.+)\$\s*$/);
+            if (match) {
+                currentCwd = match[1];
+            }
         },
 
         js_clear_screen: function () {
@@ -121,8 +135,59 @@ function feedKey(code) {
     }
 }
 
+function handleTabResponse(jsonArray) {
+    if (pendingTabPrefix === null) return;
+    const prefix = pendingTabPrefix;
+    pendingTabPrefix = null;
+    let entries;
+    try {
+        entries = JSON.parse(jsonArray);
+    } catch {
+        return;
+    }
+    const matches = entries.filter(function (name) {
+        return name.startsWith(prefix);
+    });
+    if (matches.length === 0) return;
+    if (matches.length === 1) {
+        const completion = matches[0].slice(prefix.length);
+        const currentText = cmdInput.textContent;
+        cmdInput.textContent = currentText + completion;
+        syncWasmLine(cmdInput.textContent);
+    } else {
+        let common = matches[0];
+        for (let i = 1; i < matches.length; i++) {
+            while (!matches[i].startsWith(common)) {
+                common = common.slice(0, -1);
+            }
+        }
+        if (common.length > prefix.length) {
+            const completion = common.slice(prefix.length);
+            const currentText = cmdInput.textContent;
+            cmdInput.textContent = currentText + completion;
+            syncWasmLine(cmdInput.textContent);
+        } else {
+            printLine(matches.join("  "));
+        }
+    }
+}
+
+function handleStatResponse() {}
+
 document.addEventListener("keydown", function (e) {
     if (!wasmInstance) return;
+
+    if (e.key === "Tab") {
+        e.preventDefault();
+        const text = cmdInput.textContent;
+        const parts = text.split(/\s+/);
+        const lastWord = parts[parts.length - 1] || "";
+        pendingTabPrefix = lastWord;
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ cmd: "complete", path: currentCwd }));
+        }
+        return;
+    }
 
     if (e.key === "ArrowUp") {
         e.preventDefault();
