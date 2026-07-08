@@ -243,6 +243,7 @@ static void handle_client(int client) {
         if (frame.opcode == 0x8 || frame.opcode == 0x0) break;
 
         if (frame.opcode == 0x1) {
+            std::cerr << "[debug] raw frame (" << frame.payload.size() << " bytes): [" << frame.payload << "]\n";
             std::string response = route_command(frame.payload, session_id);
             ws::send_frame(client, 0x1, response);
         }

@@ -36,15 +36,15 @@ function readCStr(ptr) {
     return str;
 }
 
-const SCRATCH_OFFSET = 64 * 1024;
-
 function writeCStr(jsString) {
+    if (!wasmInstance || !wasmInstance.exports.js_scratch_buf) return 0;
+    const ptr = wasmInstance.exports.js_scratch_buf.value;
     const bytes = new Uint8Array(mem.buffer);
     for (let i = 0; i < jsString.length && i < 4095; i++) {
-        bytes[SCRATCH_OFFSET + i] = jsString.charCodeAt(i);
+        bytes[ptr + i] = jsString.charCodeAt(i);
     }
-    bytes[SCRATCH_OFFSET + Math.min(jsString.length, 4095)] = 0;
-    return SCRATCH_OFFSET;
+    bytes[ptr + Math.min(jsString.length, 4095)] = 0;
+    return ptr;
 }
 
 function syncWasmLine(text) {
