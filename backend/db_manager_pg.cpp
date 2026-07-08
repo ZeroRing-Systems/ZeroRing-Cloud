@@ -139,11 +139,11 @@ std::vector<VFSEntry> DBManager::list_dir(const std::string& path) {
         if (dir_id < 0) return entries;
         auto dirs = txn.exec_params(
             "SELECT name FROM directories WHERE parent_id = $1 ORDER BY name", dir_id);
-        for (auto& row : dirs)
+        for (const auto& row : dirs)
             entries.push_back({row[0].as<std::string>(), true, -1});
         auto files = txn.exec_params(
             "SELECT name, size FROM files WHERE directory_id = $1 ORDER BY name", dir_id);
-        for (auto& row : files)
+        for (const auto& row : files)
             entries.push_back({row[0].as<std::string>(), false, row[1].as<int64_t>()});
         txn.commit();
     } catch (const std::exception& e) {
