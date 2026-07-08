@@ -128,14 +128,14 @@ let ws = null;
 let wsReconnectTimer = null;
 
 function connectWebSocket() {
-    const proto = location.protocol === "https:" ? "wss:" : "ws:";
-    const host = location.hostname || "localhost";
-    const port = location.port;
     let wsUrl;
-    if (!port || port === "80" || port === "443") {
-        wsUrl = proto + "//" + host + "/ws";
+    if (location.protocol === "file:") {
+        wsUrl = "ws://localhost:8080";
     } else {
-        wsUrl = "ws://" + host + ":8080";
+        const proto = location.protocol === "https:" ? "wss:" : "ws:";
+        const host = location.hostname || "localhost";
+        const port = location.port;
+        wsUrl = proto + "//" + host + (port && port !== "80" && port !== "443" ? ":" + port : "") + "/ws";
     }
     ws = new WebSocket(wsUrl);
 
