@@ -8,6 +8,10 @@ let mem;
 let wasmInstance;
 let currentPrompt = "$ ";
 
+const commandHistory = [];
+let historyIndex = -1;
+let savedInput = "";
+
 function readCStr(ptr) {
     const bytes = new Uint8Array(mem.buffer);
     let str = "";
@@ -27,6 +31,14 @@ function writeCStr(jsString) {
     }
     bytes[SCRATCH_OFFSET + Math.min(jsString.length, 4095)] = 0;
     return SCRATCH_OFFSET;
+}
+
+function syncWasmLine(text) {
+    if (!wasmInstance || !wasmInstance.exports.handle_key) return;
+    wasmInstance.exports.handle_key(21);
+    for (let i = 0; i < text.length; i++) {
+        wasmInstance.exports.handle_key(text.charCodeAt(i));
+    }
 }
 
 function printLine(text) {
@@ -112,8 +124,44 @@ function feedKey(code) {
 document.addEventListener("keydown", function (e) {
     if (!wasmInstance) return;
 
+    if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (commandHistory.length === 0) return;
+        if (historyIndex === -1) {
+            savedInput = cmdInput.textContent;
+        }
+        if (historyIndex < commandHistory.length - 1) {
+            historyIndex++;
+        }
+        const cmd = commandHistory[commandHistory.length - 1 - historyIndex];
+        cmdInput.textContent = cmd;
+        syncWasmLine(cmd);
+        return;
+    }
+
+    if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (historyIndex === -1) return;
+        historyIndex--;
+        let cmd;
+        if (historyIndex === -1) {
+            cmd = savedInput;
+        } else {
+            cmd = commandHistory[commandHistory.length - 1 - historyIndex];
+        }
+        cmdInput.textContent = cmd;
+        syncWasmLine(cmd);
+        return;
+    }
+
     if (e.key === "Enter") {
-        printLine(currentPrompt + cmdInput.textContent);
+        const cmd = cmdInput.textContent;
+        printLine(currentPrompt + cmd);
+        if (cmd.trim().length > 0) {
+            commandHistory.push(cmd);
+        }
+        historyIndex = -1;
+        savedInput = "";
         feedKey(13);
         cmdInput.textContent = "";
         e.preventDefault();
