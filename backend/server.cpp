@@ -115,6 +115,16 @@ static std::string route_command(const std::string& raw) {
         return out;
     }
 
+    if (cmd == "stat") {
+        if (!obj.count("path")) return "__stat__notfound";
+        if (!db.exists(obj["path"])) return "__stat__notfound";
+        auto entries = db.list_dir(obj["path"]);
+        if (entries.size() > 0 || db.read_file(obj["path"]).empty()) {
+            return "__stat__dir";
+        }
+        return "__stat__file";
+    }
+
     if (cmd == "mkdir") {
         if (!obj.count("path")) return json::error("mkdir: missing 'path'");
         if (db.make_dir(obj["path"])) {

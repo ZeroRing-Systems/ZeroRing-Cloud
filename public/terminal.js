@@ -128,10 +128,6 @@ function connectWebSocket() {
             handleTabResponse(e.data.slice(12));
             return;
         }
-        if (typeof e.data === "string" && e.data.startsWith("__stat__")) {
-            handleStatResponse(e.data.slice(8));
-            return;
-        }
         if (wasmInstance && wasmInstance.exports.handle_net_response) {
             const ptr = writeCStr(e.data);
             wasmInstance.exports.handle_net_response(ptr);
@@ -229,8 +225,6 @@ function handleTabResponse(jsonArray) {
         }
     }
 }
-
-function handleStatResponse() {}
 
 document.addEventListener("keydown", function (e) {
     if (!wasmInstance) return;
