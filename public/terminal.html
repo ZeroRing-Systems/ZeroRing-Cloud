@@ -37,12 +37,64 @@
         vertical-align: text-bottom;
       }
       @keyframes blink { 50% { opacity: 0; } }
+
+      #editor-overlay {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0, 0, 0, 0.85);
+        display: none;
+        flex-direction: column;
+        padding: 2rem;
+        z-index: 1000;
+      }
+      #editor-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+        color: #fff;
+        font-family: sans-serif;
+      }
+      #editor-textarea {
+        flex: 1;
+        background: #1e1e1e;
+        color: #d4d4d4;
+        border: 1px solid #333;
+        border-radius: 4px;
+        padding: 1rem;
+        font-family: "Courier New", monospace;
+        font-size: 14px;
+        resize: none;
+        outline: none;
+      }
+      .editor-btn {
+        background: #5e6ad2;
+        color: #fff;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: bold;
+        margin-left: 8px;
+      }
+      .editor-btn.cancel { background: #555; }
     </style>
   </head>
   <body>
     <div id="terminal" tabindex="0">
       <div id="output"></div>
       <div id="input-line"><span id="prompt">$ </span><span id="cmd"></span><span id="cursor"></span></div>
+    </div>
+    
+    <div id="editor-overlay">
+      <div id="editor-header">
+        <h3 id="editor-filename">filename.txt</h3>
+        <div>
+          <button class="editor-btn cancel" id="editor-cancel">Cancel</button>
+          <button class="editor-btn" id="editor-save">Save</button>
+        </div>
+      </div>
+      <textarea id="editor-textarea" spellcheck="false"></textarea>
     </div>
     <script src="terminal.js?v=2"></script>
   </body>

@@ -198,6 +198,39 @@ static std::string route_command(const std::string& raw, const std::string& sess
         return "rm: failed to remove " + obj["path"] + " (not found or not empty)";
     }
 
+    if (cmd == "edit") {
+        if (!obj.count("path")) return json::error("edit: missing 'path'");
+        std::string content = db.read_file(scope_path(session_id, obj["path"]));
+        return "__edit__" + obj["path"] + "\n" + content;
+    }
+
+    if (cmd == "run") {
+        if (!obj.count("path")) return json::error("run: missing 'path'");
+        std::string content = db.read_file(scope_path(session_id, obj["path"]));
+        if (content.empty()) return "run: file not found or empty";
+        
+        std::string temp_file = "/tmp/run_" + session_id + ".py";
+        FILE* f = fopen(temp_file.c_str(), "w");
+        if (f) {
+            fwrite(content.data(), 1, content.size(), f);
+            fclose(f);
+            
+            std::string cmd_str = "python3 " + temp_file + " 2>&1";
+            FILE* pipe = popen(cmd_str.c_str(), "r");
+            if (!pipe) return "run: failed to execute";
+            char buffer[128];
+            std::string result = "";
+            while (fgets(buffer, 128, pipe) != NULL) {
+                result += buffer;
+            }
+            pclose(pipe);
+            unlink(temp_file.c_str());
+            if (result.empty()) return "run: success (no output)";
+            return result;
+        }
+        return "run: failed to create temp file";
+    }
+
     return "unknown command: " + cmd;
 }
 

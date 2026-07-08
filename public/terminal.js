@@ -144,6 +144,8 @@ function connectWebSocket() {
         ws.send(JSON.stringify({ session: sessionId }));
     };
 
+    let currentEditPath = null;
+
     ws.onmessage = function (e) {
         if (typeof e.data === "string" && e.data.startsWith("__session__")) {
             sessionId = e.data.slice(11);
@@ -154,12 +156,42 @@ function connectWebSocket() {
             handleTabResponse(e.data.slice(12));
             return;
         }
+        if (typeof e.data === "string" && e.data.startsWith("__edit__")) {
+            const nlIndex = e.data.indexOf("\n");
+            const path = e.data.substring(8, nlIndex);
+            const content = e.data.substring(nlIndex + 1);
+            
+            document.getElementById("editor-filename").textContent = path;
+            document.getElementById("editor-textarea").value = content;
+            document.getElementById("editor-overlay").style.display = "flex";
+            document.getElementById("editor-textarea").focus();
+            currentEditPath = path;
+            return;
+        }
         if (wasmInstance && wasmInstance.exports.handle_net_response) {
             const ptr = writeCStr(e.data);
             wasmInstance.exports.handle_net_response(ptr);
         } else {
             printLine(e.data);
         }
+    };
+
+    document.getElementById("editor-cancel").onclick = function() {
+        document.getElementById("editor-overlay").style.display = "none";
+        document.getElementById("terminal").focus();
+    };
+
+    document.getElementById("editor-save").onclick = function() {
+        if (!currentEditPath) return;
+        const content = document.getElementById("editor-textarea").value;
+        ws.send(JSON.stringify({
+            cmd: "save",
+            path: currentEditPath,
+            data: content
+        }));
+        document.getElementById("editor-overlay").style.display = "none";
+        document.getElementById("terminal").focus();
+        printLine("saved: " + currentEditPath + " (" + content.length + " bytes)");
     };
 
     ws.onclose = function () {
