@@ -247,8 +247,8 @@ static std::string route_command(const std::string& raw, const std::string& sess
         else if (ext == ".sh")  runtime = "bash";
         else return "run: unsupported file type '" + ext + "' (use .py, .js, or .sh)";
 
-        // Write to sandbox temp file
-        std::string temp_file = "/tmp/sandbox/run_" + session_id + ext;
+        // Write to tmp file
+        std::string temp_file = "/tmp/run_" + session_id + ext;
         FILE* f = fopen(temp_file.c_str(), "w");
         if (!f) return "run: failed to create temp file";
         fwrite(content.data(), 1, content.size(), f);
