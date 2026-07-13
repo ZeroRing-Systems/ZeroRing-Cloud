@@ -1,0 +1,36 @@
+name: Deploy Backend to Azure VM
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'CMakeLists.txt'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VM_IP }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            echo "📥 Pulling latest code..."
+            cd ~/ZeroRing-Cloud
+            git pull origin main
+
+            echo "🔨 Building with PostgreSQL..."
+            cd build
+            cmake .. -DUSE_POSTGRES=ON
+            make -j$(nproc)
+
+            echo "🔄 Restarting service..."
+            sudo systemctl restart zeroring
+            sleep 2
+            sudo systemctl status zeroring --no-pager
+
+            echo "✅ Deploy complete!"
