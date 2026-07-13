@@ -190,6 +190,11 @@ static std::string route_command(const std::string& raw, const std::string& sess
         return json::ok("pong");
     }
 
+    if (cmd == "echo")
+    {
+        return obj.count("path") ? obj["path"] : "";
+    }
+
     if (cmd == "ls")
     {
         std::string path = obj.count("path") ? obj["path"] : "/";
