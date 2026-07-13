@@ -239,13 +239,16 @@ function connectWebSocket() {
     if (typeof e.data === "string" && e.data.startsWith("__chat__")) {
       try {
         const chat = JSON.parse(e.data.substring(8));
-        const title = chat.target === "global" 
-          ? `🌐 Global Chat: <b>${chat.from}</b>` 
-          : `🔒 Private Message from <b>${chat.from}</b>`;
-        showToast(title, chat.msg);
+        handleChatMessage(chat);
       } catch(err) {
         console.error("Failed to parse chat:", err);
       }
+      return;
+    }
+    
+    if (typeof e.data === "string" && e.data.startsWith("__notify__")) {
+      const html = e.data.substring(10);
+      showToast("📁 File Shared", html);
       return;
     }
     
@@ -520,7 +523,7 @@ WebAssembly.instantiateStreaming(
     console.error(e);
   });
 
-function showToast(title, message) {
+function showToast(title, message, onClick) {
   const container = document.getElementById("toast-container");
   if (!container) return;
   const toast = document.createElement("div");
@@ -533,8 +536,16 @@ function showToast(title, message) {
   toast.style.boxShadow = "0 10px 30px rgba(0,0,0,0.5)";
   toast.style.animation = "slideIn 0.3s ease-out";
   toast.style.fontFamily = "'Outfit', sans-serif";
+  toast.style.pointerEvents = "auto";
+  toast.style.cursor = "pointer";
   toast.innerHTML = `<div style="font-weight: 600; margin-bottom: 4px; font-size: 0.9rem; color: #a5b4fc;">${title}</div>
                      <div style="font-size: 0.9rem; color: #e2e8f0; word-break: break-word;">${message}</div>`;
+  
+  toast.addEventListener("click", () => {
+    toast.remove();
+    if (onClick) onClick();
+    else openChatPanel();
+  });
   
   container.appendChild(toast);
   
@@ -543,3 +554,218 @@ function showToast(title, message) {
     setTimeout(() => toast.remove(), 300);
   }, 5000);
 }
+
+// ========== Chat Panel System ==========
+const chatHistory = {}; // channel -> [{from, msg, time, isMine}]
+let currentChannel = "global";
+let currentUsername = "anonymous";
+let totalUnread = 0;
+const channelUnread = {};
+
+function getMyUsername() {
+  // Try to extract from prompt text
+  const promptEl = document.getElementById("prompt");
+  if (promptEl) {
+    const text = promptEl.textContent || promptEl.innerText || "";
+    const match = text.match(/^([a-zA-Z0-9_]+)/);
+    if (match && match[1] !== "zeroring") {
+      currentUsername = match[1];
+    }
+  }
+  return currentUsername;
+}
+
+function handleChatMessage(chat) {
+  const { from, target, msg } = chat;
+  getMyUsername();
+  
+  const isMine = (from === currentUsername);
+  // Determine which channel this belongs to
+  let channel;
+  if (target === "global") {
+    channel = "global";
+  } else {
+    // Private message - channel is the other person's name
+    channel = isMine ? target : from;
+  }
+  
+  // Ensure channel exists
+  if (!chatHistory[channel]) {
+    chatHistory[channel] = [];
+    addChannelTab(channel);
+  }
+  
+  const now = new Date();
+  const timeStr = now.getHours().toString().padStart(2, "0") + ":" + now.getMinutes().toString().padStart(2, "0");
+  
+  chatHistory[channel].push({ from, msg, time: timeStr, isMine });
+  
+  // If viewing this channel, render it
+  if (currentChannel === channel && document.getElementById("chat-panel").classList.contains("open")) {
+    renderMessages();
+  } else {
+    // Increment unread
+    channelUnread[channel] = (channelUnread[channel] || 0) + 1;
+    totalUnread++;
+    updateBadges();
+    
+    // Show toast if panel closed or different channel
+    if (!isMine) {
+      const isPrivate = target !== "global";
+      const title = isPrivate 
+        ? `🔒 Private from <b>${from}</b>` 
+        : `🌐 <b>${from}</b>`;
+      showToast(title, msg, () => {
+        openChatPanel();
+        switchChannel(channel);
+      });
+    }
+  }
+}
+
+function addChannelTab(channel) {
+  const container = document.getElementById("chat-channels");
+  // Check if tab already exists
+  const existing = container.querySelector(`[data-channel="${channel}"]`);
+  if (existing) return;
+  
+  const btn = document.createElement("button");
+  btn.className = "channel-tab";
+  btn.dataset.channel = channel;
+  btn.onclick = () => switchChannel(channel);
+  const icon = channel === "global" ? "🌐" : "👤";
+  btn.innerHTML = `${icon} ${channel}<span class="unread" style="display:none"></span>`;
+  container.appendChild(btn);
+}
+
+function switchChannel(channel) {
+  currentChannel = channel;
+  
+  // Update active tab
+  document.querySelectorAll(".channel-tab").forEach(tab => {
+    tab.classList.toggle("active", tab.dataset.channel === channel);
+  });
+  
+  // Clear unread for this channel
+  if (channelUnread[channel]) {
+    totalUnread -= channelUnread[channel];
+    if (totalUnread < 0) totalUnread = 0;
+    channelUnread[channel] = 0;
+    updateBadges();
+  }
+  
+  renderMessages();
+  
+  // Update placeholder
+  const input = document.getElementById("chat-input");
+  if (channel === "global") {
+    input.placeholder = "Message #global...";
+  } else {
+    input.placeholder = `Message @${channel}...`;
+  }
+}
+
+function renderMessages() {
+  const container = document.getElementById("chat-messages");
+  const msgs = chatHistory[currentChannel] || [];
+  
+  if (msgs.length === 0) {
+    container.innerHTML = '<div class="chat-empty">No messages yet.<br>Start a conversation!</div>';
+    return;
+  }
+  
+  container.innerHTML = msgs.map(m => `
+    <div class="chat-msg ${m.isMine ? 'sent' : 'received'}">
+      <div class="msg-sender">${m.isMine ? 'You' : m.from}</div>
+      <div>${escapeHtml(m.msg)}</div>
+      <div class="msg-time">${m.time}</div>
+    </div>
+  `).join("");
+  
+  container.scrollTop = container.scrollHeight;
+}
+
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function updateBadges() {
+  // Title bar badge
+  const mainBadge = document.getElementById("chat-badge");
+  if (totalUnread > 0) {
+    mainBadge.textContent = totalUnread;
+    mainBadge.style.display = "inline-block";
+  } else {
+    mainBadge.style.display = "none";
+  }
+  
+  // Per-channel badges
+  document.querySelectorAll(".channel-tab").forEach(tab => {
+    const ch = tab.dataset.channel;
+    const badge = tab.querySelector(".unread");
+    if (badge && channelUnread[ch] && channelUnread[ch] > 0) {
+      badge.textContent = channelUnread[ch];
+      badge.style.display = "inline-block";
+    } else if (badge) {
+      badge.style.display = "none";
+    }
+  });
+}
+
+function toggleChatPanel() {
+  const panel = document.getElementById("chat-panel");
+  panel.classList.toggle("open");
+  if (panel.classList.contains("open")) {
+    // Clear unread for current channel
+    if (channelUnread[currentChannel]) {
+      totalUnread -= channelUnread[currentChannel];
+      if (totalUnread < 0) totalUnread = 0;
+      channelUnread[currentChannel] = 0;
+      updateBadges();
+    }
+    renderMessages();
+    document.getElementById("chat-input").focus();
+  }
+}
+
+function openChatPanel() {
+  const panel = document.getElementById("chat-panel");
+  if (!panel.classList.contains("open")) {
+    panel.classList.add("open");
+  }
+  renderMessages();
+  document.getElementById("chat-input").focus();
+}
+
+function sendChatFromPanel() {
+  const input = document.getElementById("chat-input");
+  const msg = input.value.trim();
+  if (!msg || !ws || ws.readyState !== 1) return;
+  
+  let payload;
+  if (currentChannel === "global") {
+    payload = msg;
+  } else {
+    payload = `@${currentChannel} ${msg}`;
+  }
+  
+  ws.send(JSON.stringify({ cmd: "chat", path: payload }));
+  input.value = "";
+  input.focus();
+}
+
+// Chat input Enter key
+document.getElementById("chat-input").addEventListener("keydown", function(e) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    sendChatFromPanel();
+  }
+  e.stopPropagation(); // Don't let terminal capture these keystrokes
+});
+
+// Also stop keyup/keypress from bubbling
+document.getElementById("chat-input").addEventListener("keyup", e => e.stopPropagation());
+document.getElementById("chat-input").addEventListener("keypress", e => e.stopPropagation());
+

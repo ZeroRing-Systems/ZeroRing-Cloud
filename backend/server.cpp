@@ -543,7 +543,9 @@ static std::string route_command(const std::string& raw, const std::string& sess
     if (cmd == "chat")
     {
         std::string raw_msg = "";
-        if (obj.count("msg"))
+        if (obj.count("path"))
+            raw_msg = obj["path"];
+        else if (obj.count("msg"))
             raw_msg = obj["msg"];
             
         std::string username = "anonymous";
@@ -587,11 +589,9 @@ static std::string route_command(const std::string& raw, const std::string& sess
             ws::send_frame(fd, 0x1, payload);
         }
         
-        if (target_user == "global") {
-            return "Broadcasted to global chat.";
-        } else {
-            return "Sent message to " + target_user + ".";
-        }
+        // Also send back to sender so their chat UI updates
+        ws::send_frame(client_fd, 0x1, payload);
+        return "";
     }
 
     return "unknown command: " + cmd;
