@@ -446,9 +446,9 @@ static std::string route_command(const std::string& raw, const std::string& sess
         auto it = session_to_user.find(session_id);
         if (it != session_to_user.end())
         {
-            return it->second;
+            return "\033[96m" + it->second + "\033[0m";
         }
-        return "anonymous (session: " + session_id.substr(0, 8) + "...)";
+        return "\033[35manonymous\033[0m (session: " + session_id.substr(0, 8) + "...)";
     }
 
     // === Share a file to /shared ===

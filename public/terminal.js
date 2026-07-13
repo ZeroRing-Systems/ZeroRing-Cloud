@@ -8,6 +8,15 @@ let mem;
 let wasmInstance;
 let currentPrompt = "$ ";
 
+function formatPromptHTML(promptStr) {
+    // Example: "zeroring:/path$ "
+    const match = promptStr.match(/^(.*?):(.*)\$\s*$/);
+    if (match) {
+        return `<span class="prompt-user">${match[1]}</span><span class="prompt-colon">:</span><span class="prompt-path">${match[2]}</span><span class="prompt-dollar">$ </span>`;
+    }
+    return promptStr;
+}
+
 const commandHistory = [];
 let historyIndex = -1;
 let savedInput = "";
@@ -275,7 +284,7 @@ const imports = {
 
     js_set_prompt: function (ptr) {
       currentPrompt = readCStr(ptr);
-      promptEl.textContent = currentPrompt;
+      promptEl.innerHTML = formatPromptHTML(currentPrompt);
       const match = currentPrompt.match(/zeroring:(.+)\$\s*$/);
       if (match) {
         currentCwd = match[1];
@@ -392,7 +401,12 @@ document.addEventListener("keydown", function (e) {
 
   if (e.key === "Enter") {
     const cmd = cmdInput.textContent;
-    printLine(currentPrompt + cmd);
+    
+    const echoDiv = document.createElement("div");
+    echoDiv.className = "echo-line";
+    echoDiv.innerHTML = formatPromptHTML(currentPrompt) + `<span class="command-text">${cmd}</span>`;
+    output.appendChild(echoDiv);
+    terminal.scrollTop = terminal.scrollHeight;
     if (cmd.trim().length > 0) {
       commandHistory.push(cmd);
     }
@@ -445,17 +459,17 @@ terminal.addEventListener("click", function () {
 
 terminal.addEventListener("dragover", function (e) {
   e.preventDefault();
-  terminal.style.backgroundColor = "rgba(255, 255, 255, 0.05)";
+  document.getElementById("drag-overlay").style.display = "block";
 });
 
 terminal.addEventListener("dragleave", function (e) {
   e.preventDefault();
-  terminal.style.backgroundColor = "";
+  document.getElementById("drag-overlay").style.display = "none";
 });
 
 terminal.addEventListener("drop", function (e) {
   e.preventDefault();
-  terminal.style.backgroundColor = "";
+  document.getElementById("drag-overlay").style.display = "none";
   if (e.dataTransfer.files.length > 0) {
     const file = e.dataTransfer.files[0];
     const reader = new FileReader();

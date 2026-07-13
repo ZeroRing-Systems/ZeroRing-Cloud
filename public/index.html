@@ -4,22 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ZeroRing OS</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #0a0a0c;
-            --surface: #13141a;
-            --primary: #5e6ad2;
-            --primary-hover: #7380f3;
-            --text: #f0f0f5;
-            --text-dim: #a0a0b0;
-            --border: #232533;
+            --bg: #050508;
+            --surface: rgba(20, 20, 25, 0.6);
+            --primary: #6366f1;
+            --primary-hover: #818cf8;
+            --text: #f8fafc;
+            --text-dim: #94a3b8;
+            --border: rgba(255, 255, 255, 0.08);
+            --glow: rgba(99, 102, 241, 0.15);
         }
 
         body {
             margin: 0;
             padding: 0;
-            font-family: 'Inter', sans-serif;
+            font-family: 'Outfit', sans-serif;
             background-color: var(--bg);
             color: var(--text);
             line-height: 1.6;
@@ -29,12 +32,31 @@
             min-height: 100vh;
         }
 
+        /* Animated Background Glows */
+        .bg-glow {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(120px);
+            z-index: -1;
+            opacity: 0.5;
+            animation: float 20s ease-in-out infinite alternate;
+        }
+        .glow-1 { top: -10%; left: -10%; width: 500px; height: 500px; background: rgba(99, 102, 241, 0.4); }
+        .glow-2 { bottom: 10%; right: -10%; width: 600px; height: 600px; background: rgba(168, 85, 247, 0.3); animation-delay: -10s; }
+        .glow-3 { top: 40%; left: 50%; width: 400px; height: 400px; background: rgba(56, 189, 248, 0.2); transform: translate(-50%, -50%); }
+
+        @keyframes float {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(50px, 50px); }
+        }
+
         .container {
             max-width: 1200px;
             margin: 0 auto;
             padding: 0 2rem;
             width: 100%;
             box-sizing: border-box;
+            z-index: 1;
         }
 
         header {
@@ -50,19 +72,22 @@
             letter-spacing: -0.5px;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 0.75rem;
+            color: #fff;
+            text-decoration: none;
         }
 
         .logo-icon {
-            width: 32px;
-            height: 32px;
-            background: linear-gradient(135deg, var(--primary), #a8b1ff);
-            border-radius: 8px;
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, #6366f1, #a855f7);
+            border-radius: 10px;
             display: inline-block;
+            box-shadow: 0 0 20px rgba(168, 85, 247, 0.4);
         }
 
         .hero {
-            padding: 8rem 0 6rem;
+            padding: 6rem 0 4rem;
             text-align: center;
             display: flex;
             flex-direction: column;
@@ -70,15 +95,15 @@
         }
 
         h1 {
-            font-size: 4rem;
+            font-size: 5rem;
             font-weight: 800;
             line-height: 1.1;
             margin: 0 0 1.5rem 0;
-            letter-spacing: -1.5px;
+            letter-spacing: -2px;
         }
 
         .gradient-text {
-            background: linear-gradient(to right, #fff, #8a96ff);
+            background: linear-gradient(to right, #fff, #a5b4fc, #c084fc);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
@@ -86,124 +111,166 @@
         .subtitle {
             font-size: 1.25rem;
             color: var(--text-dim);
-            max-width: 600px;
+            max-width: 650px;
             margin: 0 0 3rem 0;
+            font-weight: 300;
         }
 
         .btn {
             display: inline-flex;
             align-items: center;
-            gap: 0.5rem;
-            background-color: var(--primary);
+            gap: 0.75rem;
+            background: linear-gradient(135deg, var(--primary), #4f46e5);
             color: white;
-            padding: 1rem 2rem;
-            border-radius: 8px;
+            padding: 1.2rem 2.5rem;
+            border-radius: 12px;
             text-decoration: none;
             font-weight: 600;
             font-size: 1.125rem;
-            transition: all 0.2s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 8px 24px rgba(94, 106, 210, 0.25);
+            box-shadow: 0 10px 30px var(--glow);
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
         .btn:hover {
-            background-color: var(--primary-hover);
-            transform: translateY(-2px);
-            box-shadow: 0 12px 32px rgba(94, 106, 210, 0.35);
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 20px 40px rgba(99, 102, 241, 0.4);
+            background: linear-gradient(135deg, var(--primary-hover), #6366f1);
         }
 
         .features {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
             gap: 2rem;
-            padding: 4rem 0;
+            padding: 2rem 0 6rem;
         }
 
         .feature-card {
-            background-color: var(--surface);
+            background: var(--surface);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 2rem;
-            transition: transform 0.2s, border-color 0.2s;
+            border-radius: 20px;
+            padding: 2.5rem;
+            transition: all 0.3s;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
         }
 
         .feature-card:hover {
-            transform: translateY(-4px);
-            border-color: var(--primary);
+            transform: translateY(-8px);
+            border-color: rgba(168, 85, 247, 0.5);
+            box-shadow: 0 20px 40px rgba(168, 85, 247, 0.15);
         }
 
         .feature-icon {
-            font-size: 2rem;
-            margin-bottom: 1rem;
+            font-size: 2.5rem;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(135deg, #a5b4fc, #fbcfe8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: inline-block;
         }
 
         .feature-title {
-            font-size: 1.25rem;
+            font-size: 1.4rem;
             font-weight: 600;
-            margin: 0 0 0.5rem 0;
+            margin: 0 0 0.75rem 0;
+            color: #fff;
         }
 
         .feature-desc {
             color: var(--text-dim);
             margin: 0;
-            font-size: 0.95rem;
+            font-size: 1rem;
+            font-weight: 300;
         }
 
+        /* Mockup Window */
         .window {
-            background-color: #000;
-            border: 1px solid var(--border);
-            border-radius: 12px;
+            background: rgba(10, 10, 15, 0.8);
+            backdrop-filter: blur(40px);
+            -webkit-backdrop-filter: blur(40px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
             overflow: hidden;
             width: 100%;
-            max-width: 800px;
-            margin: 0 auto 4rem;
-            box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+            max-width: 850px;
+            margin: 0 auto 5rem;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255,255,255,0.1);
+            position: relative;
+        }
+
+        .window::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
         }
 
         .window-header {
-            background-color: var(--surface);
-            padding: 0.75rem 1rem;
+            background: rgba(255, 255, 255, 0.03);
+            padding: 1rem 1.25rem;
             display: flex;
             gap: 0.5rem;
-            border-bottom: 1px solid var(--border);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         }
 
         .dot {
             width: 12px;
             height: 12px;
             border-radius: 50%;
+            transition: 0.2s;
         }
-        .dot.red { background-color: #ff5f56; }
-        .dot.yellow { background-color: #ffbd2e; }
-        .dot.green { background-color: #27c93f; }
+        .dot:hover { filter: brightness(1.2); }
+        .dot.red { background-color: #ff5f56; box-shadow: 0 0 10px rgba(255,95,86,0.5); }
+        .dot.yellow { background-color: #ffbd2e; box-shadow: 0 0 10px rgba(255,189,46,0.5); }
+        .dot.green { background-color: #27c93f; box-shadow: 0 0 10px rgba(39,201,63,0.5); }
 
         .window-content {
-            padding: 2rem;
+            padding: 2.5rem;
             font-family: 'JetBrains Mono', monospace;
             color: #fff;
             text-align: left;
-            font-size: 0.9rem;
+            font-size: 0.95rem;
+            line-height: 1.7;
         }
 
-        .prompt { color: #a8b1ff; }
-        .command { color: #fff; }
-        .output { color: #a0a0b0; margin-bottom: 1rem; display: block; }
+        .p-user { color: #a5b4fc; font-weight: bold; }
+        .p-colon { color: #64748b; }
+        .p-path { color: #6ee7b7; font-weight: bold; }
+        .p-dollar { color: #cbd5e1; }
+        
+        .command { color: #f8fafc; margin-left: 8px; }
+        .output { color: #94a3b8; display: block; padding-left: 0; margin-top: 4px; margin-bottom: 1.5rem; }
+        .output-highlight { color: #fbcfe8; }
 
+        @media (max-width: 768px) {
+            h1 { font-size: 3rem; }
+            .hero { padding: 4rem 0 2rem; }
+            .window-content { padding: 1.5rem; font-size: 0.85rem; }
+        }
     </style>
 </head>
 <body>
+    <div class="bg-glow glow-1"></div>
+    <div class="bg-glow glow-2"></div>
+    <div class="bg-glow glow-3"></div>
+
     <div class="container">
         <header>
-            <div class="logo">
+            <a href="#" class="logo">
                 <div class="logo-icon"></div>
                 ZeroRing
-            </div>
-            <a href="https://github.com/ZeroRing-Systems" target="_blank" style="color: var(--text-dim); text-decoration: none;">GitHub</a>
+            </a>
+            <a href="https://github.com/ZeroRing-Systems" target="_blank" style="color: var(--text-dim); text-decoration: none; font-weight: 600; transition: color 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-dim)'">GitHub</a>
         </header>
 
         <main class="hero">
             <h1>The Operating System<br><span class="gradient-text">for the Web</span></h1>
-            <p class="subtitle">A full-stack, WebAssembly-powered micro-kernel OS that runs directly in your browser. Persistent storage, zero-dependency C++ backend, and a unified shell experience.</p>
+            <p class="subtitle">A full-stack, WebAssembly-powered micro-kernel OS that runs natively in your browser. Persistent storage, zero-dependency C++ backend, and a beautiful unified shell.</p>
             
             <div class="window">
                 <div class="window-header">
@@ -212,37 +279,67 @@
                     <div class="dot green"></div>
                 </div>
                 <div class="window-content">
-                    <span class="prompt">zeroring:/$</span> <span class="command">help</span><br>
-                    <span class="output">Available commands: help, version, whoami, pwd, echo, cd, ls, mkdir, cat, rm, write, edit, run</span>
-                    <span class="prompt">zeroring:/$</span> <span class="command">write hello.txt "Hello World!"</span><br>
-                    <span class="output">saved: hello.txt (12 bytes)</span>
-                    <span class="prompt">zeroring:/$</span> <span class="command">cat hello.txt</span><br>
-                    <span class="output">Hello World!</span>
-                    <span class="prompt">zeroring:/$</span> <span class="command _">_</span>
+                    <div>
+                        <span class="p-user">zeroring</span><span class="p-colon">:</span><span class="p-path">/</span><span class="p-dollar">$</span>
+                        <span class="command">whoami</span>
+                    </div>
+                    <div class="output">anonymous (session: 8f032115291bebf5d5e57385b53113f1)</div>
+                    
+                    <div>
+                        <span class="p-user">zeroring</span><span class="p-colon">:</span><span class="p-path">/</span><span class="p-dollar">$</span>
+                        <span class="command">write game.py "print('Hello ZeroRing!')"</span>
+                    </div>
+                    <div class="output">saved: game.py (23 bytes)</div>
+                    
+                    <div>
+                        <span class="p-user">zeroring</span><span class="p-colon">:</span><span class="p-path">/</span><span class="p-dollar">$</span>
+                        <span class="command">run game.py</span>
+                    </div>
+                    <div class="output output-highlight">Hello ZeroRing!</div>
+
+                    <div>
+                        <span class="p-user">zeroring</span><span class="p-colon">:</span><span class="p-path">/</span><span class="p-dollar">$</span>
+                        <span class="command _" style="animation: blink 1s step-end infinite;">_</span>
+                    </div>
                 </div>
             </div>
 
             <a href="terminal.html" class="btn">
                 Launch Terminal
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
             </a>
         </main>
 
         <div class="features">
             <div class="feature-card">
-                <div class="feature-icon">🚀</div>
-                <h3 class="feature-title">WASM Kernel</h3>
-                <p class="feature-desc">A custom C++ kernel compiled to WebAssembly running at near-native speeds directly in your browser.</p>
+                <div class="feature-icon">⚡️</div>
+                <h3 class="feature-title">Native WASM Kernel</h3>
+                <p class="feature-desc">A custom C++ kernel compiled directly to WebAssembly for screaming fast execution directly in your browser.</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon">💾</div>
-                <h3 class="feature-title">Persistent VFS</h3>
-                <p class="feature-desc">Multi-user persistent storage backed by PostgreSQL. Your files are isolated and securely saved across sessions.</p>
+                <h3 class="feature-title">Persistent Database</h3>
+                <p class="feature-desc">Multi-user persistent storage backed by PostgreSQL. Your sessions, files, and shares are saved forever.</p>
             </div>
             <div class="feature-card">
-                <div class="feature-icon">⚡</div>
-                <h3 class="feature-title">Real-time WebSocket</h3>
-                <p class="feature-desc">Zero-dependency C++ concurrent backend proxying kernel operations with ultra-low latency.</p>
+                <div class="feature-icon">🌐</div>
+                <h3 class="feature-title">WebSockets & API</h3>
+                <p class="feature-desc">Zero-dependency concurrent C++ backend proxying real-time kernel operations with ultra-low latency.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🔒</div>
+                <h3 class="feature-title">Sandboxed Execution</h3>
+                <p class="feature-desc">Run Python, Node.js, and Bash scripts directly from your terminal in a secure, resource-limited server sandbox.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🤝</div>
+                <h3 class="feature-title">Global Sharing</h3>
+                <p class="feature-desc">Share files, read community scripts, and build together in a unified public virtual filesystem.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">✨</div>
+                <h3 class="feature-title">Modern Interface</h3>
+                <p class="feature-desc">A beautiful, hardware-accelerated terminal interface with drag-and-drop uploads, GUI editor, and colors.</p>
             </div>
         </div>
     </div>
