@@ -235,6 +235,20 @@ function connectWebSocket() {
       input.click();
       return;
     }
+    
+    if (typeof e.data === "string" && e.data.startsWith("__chat__")) {
+      try {
+        const chat = JSON.parse(e.data.substring(8));
+        const title = chat.target === "global" 
+          ? `🌐 Global Chat: <b>${chat.from}</b>` 
+          : `🔒 Private Message from <b>${chat.from}</b>`;
+        showToast(title, chat.msg);
+      } catch(err) {
+        console.error("Failed to parse chat:", err);
+      }
+      return;
+    }
+    
     if (wasmInstance && wasmInstance.exports.handle_net_response) {
       const ptr = writeCStr(e.data);
       wasmInstance.exports.handle_net_response(ptr);
@@ -505,3 +519,27 @@ WebAssembly.instantiateStreaming(
     printLine("boot failed: " + e);
     console.error(e);
   });
+
+function showToast(title, message) {
+  const container = document.getElementById("toast-container");
+  if (!container) return;
+  const toast = document.createElement("div");
+  toast.style.background = "rgba(20, 20, 25, 0.95)";
+  toast.style.border = "1px solid rgba(255, 255, 255, 0.1)";
+  toast.style.borderLeft = title.includes("Private") ? "4px solid #fbcfe8" : "4px solid #818cf8";
+  toast.style.padding = "12px 16px";
+  toast.style.borderRadius = "8px";
+  toast.style.color = "#fff";
+  toast.style.boxShadow = "0 10px 30px rgba(0,0,0,0.5)";
+  toast.style.animation = "slideIn 0.3s ease-out";
+  toast.style.fontFamily = "'Outfit', sans-serif";
+  toast.innerHTML = `<div style="font-weight: 600; margin-bottom: 4px; font-size: 0.9rem; color: #a5b4fc;">${title}</div>
+                     <div style="font-size: 0.9rem; color: #e2e8f0; word-break: break-word;">${message}</div>`;
+  
+  container.appendChild(toast);
+  
+  setTimeout(() => {
+    toast.style.animation = "slideOut 0.3s ease-in forwards";
+    setTimeout(() => toast.remove(), 300);
+  }, 5000);
+}

@@ -219,6 +219,15 @@
       .editor-btn:hover { background: #818cf8; }
       .editor-btn.cancel { background: transparent; color: #a1a1aa; }
       .editor-btn.cancel:hover { background: rgba(255,255,255,0.1); color: #fff; }
+
+      @keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+      @keyframes slideOut {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(100%); opacity: 0; }
+      }
     </style>
   </head>
   <body>
@@ -239,6 +248,9 @@
           <span id="prompt"></span><span id="cmd"></span><span id="cursor"></span>
       </div>
     </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container" style="position: absolute; top: 40px; right: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 1000; pointer-events: none;"></div>
     
     <div id="editor-overlay">
       <div class="editor-window">

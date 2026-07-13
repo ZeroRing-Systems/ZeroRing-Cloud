@@ -22,9 +22,9 @@ static std::map<std::string, bool> known_sessions;
 static std::map<std::string, std::string> session_to_user; // session_id -> username
 static std::mutex sessions_mtx;
 
-#include <vector>
+#include <map>
 #include <algorithm>
-static std::vector<int> active_clients;
+static std::map<int, std::string> active_clients;
 static std::mutex clients_mtx;
 
 static std::string generate_session_id()
@@ -455,23 +455,29 @@ static std::string route_command(const std::string& raw, const std::string& sess
         return "\033[35manonymous\033[0m (session: " + session_id.substr(0, 8) + "...)";
     }
 
-    // === Share a file to /shared ===
+    // === Share a file ===
     if (cmd == "share")
     {
         if (!obj.count("path"))
             return json::error("share: missing 'path'");
-        std::string src_path = scope_path(session_id, obj["path"]);
-        std::string content = db.read_file(src_path);
-        if (content.empty())
-            return "share: file not found or empty";
+            
+        std::string path = obj["path"];
+        
+        std::string target_user = "";
+        if (obj.count("target") && obj["target"].is_string())
+            target_user = obj["target"];
 
-        // Get the filename
-        std::string filename = obj["path"];
-        auto slash = filename.rfind('/');
+        std::string actual_path = scope_path(session_id, path);
+        if (!db.exists(actual_path))
+            return "share: file not found: " + path;
+            
+        std::string content = db.read_file(actual_path);
+        
+        std::string filename = path;
+        auto slash = path.rfind('/');
         if (slash != std::string::npos)
-            filename = filename.substr(slash + 1);
-
-        // Determine author name
+            filename = path.substr(slash + 1);
+            
         std::string author = "anonymous";
         {
             std::lock_guard<std::mutex> lock(sessions_mtx);
@@ -480,17 +486,32 @@ static std::string route_command(const std::string& raw, const std::string& sess
                 author = it->second;
         }
 
-        // Ensure /shared exists
-        if (!db.exists("/shared"))
-            db.make_dir("/shared");
-
-        // Write to /shared/filename
-        std::string shared_path = "/shared/" + filename;
-        if (db.write_file(shared_path, content))
-        {
-            return "\033[32mshared: " + filename + " → /shared/ (by " + author + ")\033[0m";
+        if (target_user.empty()) {
+            if (!db.exists("/shared")) db.make_dir("/shared");
+            std::string shared_path = "/shared/" + filename;
+            if (db.write_file(shared_path, content))
+                return "\033[32mshared globally: " + filename + " (by " + author + ")\033[0m";
+            return "share: failed to share " + filename;
+        } else {
+            std::string user_dir = "/users/" + target_user;
+            if (!db.exists(user_dir))
+                return "share: target user '" + target_user + "' does not exist.";
+            
+            std::string shared_path = user_dir + "/" + filename;
+            if (db.write_file(shared_path, content)) {
+                std::string notif = "__notify__<span style=\"color:#818cf8;font-weight:bold\">" + author + "</span> shared <span style=\"color:#6ee7b7\">" + filename + "</span> with you!";
+                std::lock_guard<std::mutex> lock1(clients_mtx);
+                std::lock_guard<std::mutex> lock2(sessions_mtx);
+                for (auto const& [fd, s_id] : active_clients) {
+                    auto it2 = session_to_user.find(s_id);
+                    if (it2 != session_to_user.end() && it2->second == target_user) {
+                        ws::send_frame(fd, 0x1, notif);
+                    }
+                }
+                return "\033[32mprivately shared: " + filename + " → " + target_user + "\033[0m";
+            }
+            return "share: failed to share privately";
         }
-        return "share: failed to share " + filename;
     }
 
     // === Unshare a file ===
@@ -521,9 +542,9 @@ static std::string route_command(const std::string& raw, const std::string& sess
     // === Chat broadcast ===
     if (cmd == "chat")
     {
-        std::string msg = "";
-        if (obj.count("msg"))
-            msg = obj["msg"];
+        std::string raw_msg = "";
+        if (obj.count("msg") && obj["msg"].is_string())
+            raw_msg = obj["msg"];
             
         std::string username = "anonymous";
         {
@@ -533,18 +554,48 @@ static std::string route_command(const std::string& raw, const std::string& sess
                 username = it->second;
         }
         
-        std::string broadcast_msg = "\033[95m[Global Chat] \033[96m" + username + "\033[0m: " + msg;
+        std::string target_user = "global";
+        std::string text = raw_msg;
         
+        if (raw_msg.rfind("@", 0) == 0) {
+            size_t space = raw_msg.find(' ');
+            if (space != std::string::npos) {
+                target_user = raw_msg.substr(1, space - 1);
+                text = raw_msg.substr(space + 1);
+            }
+        }
+        
+        json::JSON chat_obj;
+        chat_obj["from"] = username;
+        chat_obj["target"] = target_user;
+        chat_obj["msg"] = text;
+        std::string payload = "__chat__" + chat_obj.dump();
+        
+        std::vector<int> target_fds;
         {
-            std::lock_guard<std::mutex> lock(clients_mtx);
-            for (int fd : active_clients)
-            {
-                if (fd != client_fd) {
-                    ws::send_frame(fd, 0x1, broadcast_msg);
+            std::lock_guard<std::mutex> lock1(clients_mtx);
+            std::lock_guard<std::mutex> lock2(sessions_mtx);
+            for (auto const& [fd, s_id] : active_clients) {
+                if (target_user == "global") {
+                    if (fd != client_fd) target_fds.push_back(fd);
+                } else {
+                    auto it2 = session_to_user.find(s_id);
+                    if (it2 != session_to_user.end() && it2->second == target_user) {
+                        target_fds.push_back(fd);
+                    }
                 }
             }
         }
-        return broadcast_msg; // return to sender as well
+        
+        for (int fd : target_fds) {
+            ws::send_frame(fd, 0x1, payload);
+        }
+        
+        if (target_user == "global") {
+            return "Broadcasted to global chat.";
+        } else {
+            return "Sent message to " + target_user + ".";
+        }
     }
 
     return "unknown command: " + cmd;
@@ -594,7 +645,7 @@ static void handle_client(int client)
 
     {
         std::lock_guard<std::mutex> lock(clients_mtx);
-        active_clients.push_back(client);
+        active_clients[client] = session_id;
     }
 
     while (true)
@@ -623,9 +674,7 @@ static void handle_client(int client)
 
     {
         std::lock_guard<std::mutex> lock(clients_mtx);
-        auto it = std::find(active_clients.begin(), active_clients.end(), client);
-        if (it != active_clients.end())
-            active_clients.erase(it);
+        active_clients.erase(client);
     }
 
     std::cerr << "[server] client disconnected (fd=" << client << ")\n";
