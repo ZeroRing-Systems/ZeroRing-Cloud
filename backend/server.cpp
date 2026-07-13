@@ -246,6 +246,20 @@ static std::string route_command(const std::string& raw, const std::string& sess
         return "mkdir: failed to create " + obj["path"];
     }
 
+    if (cmd == "touch")
+    {
+        if (!obj.count("path"))
+            return json::error("touch: missing 'path'");
+        std::string scoped = scope_path(session_id, obj["path"]);
+        if (!db.exists(scoped))
+        {
+            if (db.write_file(scoped, ""))
+                return "";
+            return "touch: failed to create " + obj["path"];
+        }
+        return ""; // Success quietly
+    }
+
     if (cmd == "cat")
     {
         if (!obj.count("path"))
