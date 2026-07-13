@@ -464,7 +464,7 @@ static std::string route_command(const std::string& raw, const std::string& sess
         std::string path = obj["path"];
         
         std::string target_user = "";
-        if (obj.count("target") && obj["target"].is_string())
+        if (obj.count("target"))
             target_user = obj["target"];
 
         std::string actual_path = scope_path(session_id, path);
@@ -543,7 +543,7 @@ static std::string route_command(const std::string& raw, const std::string& sess
     if (cmd == "chat")
     {
         std::string raw_msg = "";
-        if (obj.count("msg") && obj["msg"].is_string())
+        if (obj.count("msg"))
             raw_msg = obj["msg"];
             
         std::string username = "anonymous";
@@ -565,11 +565,7 @@ static std::string route_command(const std::string& raw, const std::string& sess
             }
         }
         
-        json::JSON chat_obj;
-        chat_obj["from"] = username;
-        chat_obj["target"] = target_user;
-        chat_obj["msg"] = text;
-        std::string payload = "__chat__" + chat_obj.dump();
+        std::string payload = "__chat__{\"from\":\"" + username + "\",\"target\":\"" + target_user + "\",\"msg\":\"" + text + "\"}";
         
         std::vector<int> target_fds;
         {
