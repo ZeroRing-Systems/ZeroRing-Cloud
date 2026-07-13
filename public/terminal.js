@@ -3,6 +3,26 @@ const output = document.getElementById("output");
 const inputLine = document.getElementById("input-line");
 const promptEl = document.getElementById("prompt");
 const cmdInput = document.getElementById("cmd");
+let currentCmdLine = "";
+let inputCursorIndex = -1;
+
+function escapeHTML(str) {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function updateCmd(newCmd, newCursor = -1) {
+  currentCmdLine = newCmd;
+  inputCursorIndex = newCursor;
+  if (inputCursorIndex === -1 || inputCursorIndex >= currentCmdLine.length) {
+    cmdInput.innerHTML = escapeHTML(currentCmdLine) + '<span id="cursor"></span>';
+  } else {
+    const safeBefore = escapeHTML(currentCmdLine.slice(0, inputCursorIndex));
+    const safeAfter = escapeHTML(currentCmdLine.slice(inputCursorIndex));
+    cmdInput.innerHTML = safeBefore + '<span id="cursor"></span>' + safeAfter;
+  }
+  syncWasmLine(currentCmdLine);
+}
+
 
 let mem;
 let wasmInstance;
@@ -364,9 +384,7 @@ function handleTabResponse(jsonArray) {
   if (matches.length === 0) return;
   if (matches.length === 1) {
     const completion = matches[0].slice(prefix.length);
-    const currentText = cmdInput.textContent;
-    cmdInput.textContent = currentText + completion;
-    syncWasmLine(cmdInput.textContent);
+    updateCmd(currentCmdLine + completion);
   } else {
     let common = matches[0];
     for (let i = 1; i < matches.length; i++) {
@@ -376,9 +394,7 @@ function handleTabResponse(jsonArray) {
     }
     if (common.length > prefix.length) {
       const completion = common.slice(prefix.length);
-      const currentText = cmdInput.textContent;
-      cmdInput.textContent = currentText + completion;
-      syncWasmLine(cmdInput.textContent);
+      updateCmd(currentCmdLine + completion);
     } else {
       printLine(matches.join("  "));
     }
@@ -391,8 +407,7 @@ document.addEventListener("keydown", function (e) {
 
   if (e.key === "Tab") {
     e.preventDefault();
-    const text = cmdInput.textContent;
-    const parts = text.split(/\s+/);
+    const parts = currentCmdLine.split(/\s+/);
     const lastWord = parts[parts.length - 1] || "";
     pendingTabPrefix = lastWord;
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -405,14 +420,13 @@ document.addEventListener("keydown", function (e) {
     e.preventDefault();
     if (commandHistory.length === 0) return;
     if (historyIndex === -1) {
-      savedInput = cmdInput.textContent;
+      savedInput = currentCmdLine;
     }
     if (historyIndex < commandHistory.length - 1) {
       historyIndex++;
     }
     const cmd = commandHistory[commandHistory.length - 1 - historyIndex];
-    cmdInput.textContent = cmd;
-    syncWasmLine(cmd);
+    updateCmd(cmd);
     return;
   }
 
@@ -426,17 +440,16 @@ document.addEventListener("keydown", function (e) {
     } else {
       cmd = commandHistory[commandHistory.length - 1 - historyIndex];
     }
-    cmdInput.textContent = cmd;
-    syncWasmLine(cmd);
+    updateCmd(cmd);
     return;
   }
 
   if (e.key === "Enter") {
-    const cmd = cmdInput.textContent;
+    const cmd = currentCmdLine;
     
     const echoDiv = document.createElement("div");
     echoDiv.className = "echo-line";
-    echoDiv.innerHTML = formatPromptHTML(currentPrompt) + `<span class="command-text">${cmd}</span>`;
+    echoDiv.innerHTML = formatPromptHTML(currentPrompt) + `<span class="command-text">${escapeHTML(cmd)}</span>`;
     output.appendChild(echoDiv);
     terminal.scrollTop = terminal.scrollHeight;
     if (cmd.trim().length > 0) {
@@ -445,15 +458,39 @@ document.addEventListener("keydown", function (e) {
     historyIndex = -1;
     savedInput = "";
     feedKey(13);
-    cmdInput.textContent = "";
+    updateCmd("");
     e.preventDefault();
     return;
   }
 
-  if (e.key === "Backspace") {
-    feedKey(8);
-    cmdInput.textContent = cmdInput.textContent.slice(0, -1);
+  if (e.key === "ArrowLeft") {
     e.preventDefault();
+    let idx = inputCursorIndex === -1 ? currentCmdLine.length : inputCursorIndex;
+    if (idx > 0) {
+      updateCmd(currentCmdLine, idx - 1);
+    }
+    return;
+  }
+
+  if (e.key === "ArrowRight") {
+    e.preventDefault();
+    let idx = inputCursorIndex === -1 ? currentCmdLine.length : inputCursorIndex;
+    if (idx < currentCmdLine.length) {
+      let nextIdx = idx + 1;
+      if (nextIdx === currentCmdLine.length) nextIdx = -1;
+      updateCmd(currentCmdLine, nextIdx);
+    }
+    return;
+  }
+
+  if (e.key === "Backspace") {
+    e.preventDefault();
+    let idx = inputCursorIndex === -1 ? currentCmdLine.length : inputCursorIndex;
+    if (idx > 0) {
+      const newCmd = currentCmdLine.slice(0, idx - 1) + currentCmdLine.slice(idx);
+      feedKey(8); // keep wasm in sync vaguely if needed
+      updateCmd(newCmd, inputCursorIndex === -1 ? -1 : idx - 1);
+    }
     return;
   }
 
@@ -462,7 +499,7 @@ document.addEventListener("keydown", function (e) {
     if (selection) {
       navigator.clipboard.writeText(selection);
     } else {
-      navigator.clipboard.writeText(cmdInput.textContent);
+      navigator.clipboard.writeText(currentCmdLine);
     }
     e.preventDefault();
     return;
@@ -472,15 +509,18 @@ document.addEventListener("keydown", function (e) {
     e.preventDefault();
     navigator.clipboard.readText().then(function (text) {
       const clean = text.replace(/[\r\n]/g, "");
-      cmdInput.textContent += clean;
-      syncWasmLine(cmdInput.textContent);
+      let idx = inputCursorIndex === -1 ? currentCmdLine.length : inputCursorIndex;
+      const newCmd = currentCmdLine.slice(0, idx) + clean + currentCmdLine.slice(idx);
+      updateCmd(newCmd, inputCursorIndex === -1 ? -1 : idx + clean.length);
     });
     return;
   }
 
   if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
     feedKey(e.key.charCodeAt(0));
-    cmdInput.textContent += e.key;
+    let idx = inputCursorIndex === -1 ? currentCmdLine.length : inputCursorIndex;
+    const newCmd = currentCmdLine.slice(0, idx) + e.key + currentCmdLine.slice(idx);
+    updateCmd(newCmd, inputCursorIndex === -1 ? -1 : idx + 1);
     e.preventDefault();
   }
 });
