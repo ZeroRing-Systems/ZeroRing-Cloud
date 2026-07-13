@@ -699,6 +699,48 @@ static void handle_client(int client)
             std::cerr << "[debug] raw frame (" << frame.payload.size() << " bytes): ["
                       << frame.payload << "]\n";
             std::string response = route_command(frame.payload, session_id, client);
+            
+            auto obj = json::parse(frame.payload);
+            
+            if (obj.count("pipe"))
+            {
+                std::string pipe_cmd = obj["pipe"];
+                if (pipe_cmd.find("grep ") == 0)
+                {
+                    std::string search = pipe_cmd.substr(5);
+                    std::istringstream iss(response);
+                    std::string line;
+                    std::string new_resp = "";
+                    while (std::getline(iss, line))
+                    {
+                        if (line.find(search) != std::string::npos)
+                        {
+                            new_resp += line + "\n";
+                        }
+                    }
+                    if (!new_resp.empty() && new_resp.back() == '\n') new_resp.pop_back();
+                    response = new_resp;
+                }
+            }
+            
+            if (obj.count("redirect"))
+            {
+                std::string red_file = obj["redirect"];
+                bool append = obj.count("append") ? (obj["append"] == "true") : false;
+                std::string scoped_red = scope_path(session_id, red_file);
+                
+                if (append)
+                {
+                    std::string existing = db.exists(scoped_red) ? db.read_file(scoped_red) : "";
+                    db.write_file(scoped_red, existing + response + "\n");
+                }
+                else
+                {
+                    db.write_file(scoped_red, response + "\n");
+                }
+                response = ""; // Suppress output
+            }
+            
             if (!response.empty())
             {
                 ws::send_frame(client, 0x1, response);
