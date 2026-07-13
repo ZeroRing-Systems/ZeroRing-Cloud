@@ -52,6 +52,7 @@ static std::string basename(const std::string& path) {
 struct DBManager::Impl {
     VFSNode* root;
     std::mutex mtx;
+    std::map<std::string, std::string> users;
 
     Impl() : root(new VFSNode("/", true)) {}
     ~Impl() { delete root; }
@@ -170,15 +171,45 @@ bool DBManager::exists(const std::string& path) {
 }
 
 bool DBManager::register_user(const std::string& username, const std::string& password) {
-    return false; // Not supported in memory mode
+    std::lock_guard<std::mutex> lock(impl_->mtx);
+    if (impl_->users.count(username)) return false;
+    impl_->users[username] = password;
+    return true;
 }
 
 bool DBManager::authenticate_user(const std::string& username, const std::string& password) {
-    return false; // Not supported in memory mode
+    std::lock_guard<std::mutex> lock(impl_->mtx);
+    auto it = impl_->users.find(username);
+    if (it != impl_->users.end() && it->second == password) return true;
+    return false;
 }
 
 void DBManager::migrate_session_to_user(const std::string& session_id, const std::string& username) {
-    // Not supported in memory mode
+    std::lock_guard<std::mutex> lock(impl_->mtx);
+    VFSNode* sessions_dir = impl_->resolve("/sessions");
+    if (!sessions_dir) return;
+
+    auto it = sessions_dir->children.find(session_id);
+    if (it == sessions_dir->children.end()) return;
+
+    VFSNode* session_node = it->second;
+    sessions_dir->children.erase(it);
+
+    VFSNode* users_dir = impl_->resolve("/users");
+    if (!users_dir) {
+        users_dir = new VFSNode("users", true);
+        impl_->root->children["users"] = users_dir;
+    }
+
+    // Rename the session node to the username
+    session_node->name = username;
+    
+    // If the user already had a directory, we could merge or overwrite. 
+    // Here we just overwrite for simplicity in memory mode.
+    if (users_dir->children.count(username)) {
+        delete users_dir->children[username];
+    }
+    users_dir->children[username] = session_node;
 }
 
 #endif
