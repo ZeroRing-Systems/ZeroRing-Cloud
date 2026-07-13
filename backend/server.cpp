@@ -478,39 +478,39 @@ static std::string route_command(const std::string& raw, const std::string& sess
         if (slash != std::string::npos)
             filename = path.substr(slash + 1);
             
-        std::string author = "anonymous";
+        if (!target_user.empty())
         {
-            std::lock_guard<std::mutex> lock(sessions_mtx);
-            auto it = session_to_user.find(session_id);
-            if (it != session_to_user.end())
-                author = it->second;
-        }
-
-        if (target_user.empty()) {
-            if (!db.exists("/shared")) db.make_dir("/shared");
-            std::string shared_path = "/shared/" + filename;
-            if (db.write_file(shared_path, content))
-                return "\033[32mshared globally: " + filename + " (by " + author + ")\033[0m";
-            return "share: failed to share " + filename;
-        } else {
-            std::string user_dir = "/users/" + target_user;
-            if (!db.exists(user_dir))
-                return "share: target user '" + target_user + "' does not exist.";
+            // Private share
+            std::string dest_dir = "/users/" + target_user + "/";
+            std::string dest_path = dest_dir + filename;
             
-            std::string shared_path = user_dir + "/" + filename;
-            if (db.write_file(shared_path, content)) {
-                std::string notif = "__notify__<span style=\"color:#818cf8;font-weight:bold\">" + author + "</span> shared <span style=\"color:#6ee7b7\">" + filename + "</span> with you!";
+            db.write_file(dest_path, content);
+            
+            // Send notification to target user
+            std::string notify_html = "<b>" + session_to_user[session_id] + "</b> shared <code>" + filename + "</code> with you!";
+            std::vector<int> target_fds;
+            {
                 std::lock_guard<std::mutex> lock1(clients_mtx);
                 std::lock_guard<std::mutex> lock2(sessions_mtx);
                 for (auto const& [fd, s_id] : active_clients) {
                     auto it2 = session_to_user.find(s_id);
                     if (it2 != session_to_user.end() && it2->second == target_user) {
-                        ws::send_frame(fd, 0x1, notif);
+                        target_fds.push_back(fd);
                     }
                 }
-                return "\033[32mprivately shared: " + filename + " → " + target_user + "\033[0m";
             }
-            return "share: failed to share privately";
+            std::string payload = "__notify__" + notify_html;
+            for (int fd : target_fds) {
+                ws::send_frame(fd, 0x1, payload);
+            }
+            
+            return "\033[32mSuccess:\033[0m Privately shared " + path + " with @" + target_user + ".";
+        }
+        else
+        {
+            // Global share
+            db.write_file("/shared/" + filename, content);
+            return "shared " + path + " -> /shared/" + filename;
         }
     }
 
@@ -519,15 +519,43 @@ static std::string route_command(const std::string& raw, const std::string& sess
     {
         if (!obj.count("path"))
             return json::error("unshare: missing 'path'");
-        std::string filename = obj["path"];
-        auto slash = filename.rfind('/');
+            
+        std::string path = obj["path"];
+        std::string filename = path;
+        auto slash = path.rfind('/');
         if (slash != std::string::npos)
-            filename = filename.substr(slash + 1);
-        if (db.remove("/shared/" + filename))
-        {
-            return "unshared: " + filename;
-        }
-        return "unshare: file not found in /shared";
+            filename = path.substr(slash + 1);
+            
+        std::string shared_path = "/shared/" + filename;
+        db.remove(shared_path);
+        return "unshared /shared/" + filename;
+    }
+
+    // === ZPM Install ===
+    if (cmd == "zpm_install")
+    {
+        if (!obj.count("package"))
+            return json::error("zpm: missing 'package'");
+        if (!obj.count("cwd"))
+            return json::error("zpm: missing 'cwd'");
+            
+        std::string pkg = obj["package"];
+        std::string cwd = obj["cwd"];
+        
+        std::string shared_path = "/shared/" + pkg;
+        if (!db.exists(shared_path))
+            return "\033[31mError:\033[0m Package '" + pkg + "' not found in global registry (/shared/).";
+            
+        std::string content = db.read_file(shared_path);
+        
+        std::string dest_path = cwd;
+        if (dest_path.back() != '/') dest_path += "/";
+        dest_path += pkg;
+        
+        std::string actual_dest = scope_path(session_id, dest_path);
+        db.write_file(actual_dest, content);
+        
+        return "\033[32mSuccess:\033[0m Package '" + pkg + "' installed to " + dest_path;
     }
 
     // === List shared files ===
