@@ -517,6 +517,17 @@ static std::string route_command(const std::string& raw, const std::string& sess
     // === Unshare a file ===
     if (cmd == "unshare")
     {
+        std::string username = "anonymous";
+        {
+            std::lock_guard<std::mutex> lock(sessions_mtx);
+            auto it = session_to_user.find(session_id);
+            if (it != session_to_user.end())
+                username = it->second;
+        }
+
+        if (username != "root")
+            return "\033[31mError:\033[0m Permission denied. Only 'root' can delete globally shared files.";
+
         if (!obj.count("path"))
             return json::error("unshare: missing 'path'");
             
@@ -527,6 +538,9 @@ static std::string route_command(const std::string& raw, const std::string& sess
             filename = path.substr(slash + 1);
             
         std::string shared_path = "/shared/" + filename;
+        if (!db.exists(shared_path))
+            return "unshare: file not found: " + filename;
+            
         db.remove(shared_path);
         return "unshared /shared/" + filename;
     }
