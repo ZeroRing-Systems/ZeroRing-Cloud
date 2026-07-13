@@ -576,10 +576,10 @@ function getMyUsername() {
 }
 
 function handleChatMessage(chat) {
-  const { from, target, msg } = chat;
-  getMyUsername();
+  const { from, target, msg, sid } = chat;
   
-  const isMine = (from === currentUsername);
+  // Use session ID to determine if this is our own message
+  const isMine = (sid === sessionId);
   // Determine which channel this belongs to
   let channel;
   if (target === "global") {

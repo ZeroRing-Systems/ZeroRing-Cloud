@@ -567,15 +567,16 @@ static std::string route_command(const std::string& raw, const std::string& sess
             }
         }
         
-        std::string payload = "__chat__{\"from\":\"" + username + "\",\"target\":\"" + target_user + "\",\"msg\":\"" + text + "\"}";
+        std::string payload = "__chat__{\"from\":\"" + username + "\",\"target\":\"" + target_user + "\",\"msg\":\"" + text + "\",\"sid\":\"" + session_id + "\"}";
         
         std::vector<int> target_fds;
         {
             std::lock_guard<std::mutex> lock1(clients_mtx);
             std::lock_guard<std::mutex> lock2(sessions_mtx);
             for (auto const& [fd, s_id] : active_clients) {
+                if (fd == client_fd) continue; // sender gets echo separately
                 if (target_user == "global") {
-                    if (fd != client_fd) target_fds.push_back(fd);
+                    target_fds.push_back(fd);
                 } else {
                     auto it2 = session_to_user.find(s_id);
                     if (it2 != session_to_user.end() && it2->second == target_user) {
