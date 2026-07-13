@@ -127,7 +127,7 @@ function printLine(text) {
 let ws = null;
 let wsReconnectTimer = null;
 
-const BACKEND_WS_URL = "ws://20.193.236.244:8080";
+const BACKEND_WS_URL = "wss://zeroring-sys.duckdns.org";
 
 function connectWebSocket() {
     let wsUrl;
