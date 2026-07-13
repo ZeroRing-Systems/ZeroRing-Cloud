@@ -22,6 +22,11 @@ static std::map<std::string, bool> known_sessions;
 static std::map<std::string, std::string> session_to_user; // session_id -> username
 static std::mutex sessions_mtx;
 
+#include <vector>
+#include <algorithm>
+static std::vector<int> active_clients;
+static std::mutex clients_mtx;
+
 static std::string generate_session_id()
 {
     std::random_device rd;
@@ -169,7 +174,7 @@ static std::string format_ls(const std::vector<VFSEntry>& entries)
     return out;
 }
 
-static std::string route_command(const std::string& raw, const std::string& session_id)
+static std::string route_command(const std::string& raw, const std::string& session_id, int client_fd)
 {
     auto obj = json::parse(raw);
 
@@ -513,6 +518,35 @@ static std::string route_command(const std::string& raw, const std::string& sess
         return format_ls(entries);
     }
 
+    // === Chat broadcast ===
+    if (cmd == "chat")
+    {
+        std::string msg = "";
+        if (obj.count("msg"))
+            msg = obj["msg"];
+            
+        std::string username = "anonymous";
+        {
+            std::lock_guard<std::mutex> lock(sessions_mtx);
+            auto it = session_to_user.find(session_id);
+            if (it != session_to_user.end())
+                username = it->second;
+        }
+        
+        std::string broadcast_msg = "\033[95m[Global Chat] \033[96m" + username + "\033[0m: " + msg;
+        
+        {
+            std::lock_guard<std::mutex> lock(clients_mtx);
+            for (int fd : active_clients)
+            {
+                if (fd != client_fd) {
+                    ws::send_frame(fd, 0x1, broadcast_msg);
+                }
+            }
+        }
+        return broadcast_msg; // return to sender as well
+    }
+
     return "unknown command: " + cmd;
 }
 
@@ -558,6 +592,11 @@ static void handle_client(int client)
 
     std::cerr << "[server] client connected (fd=" << client << " session=" << session_id << ")\n";
 
+    {
+        std::lock_guard<std::mutex> lock(clients_mtx);
+        active_clients.push_back(client);
+    }
+
     while (true)
     {
         ws::Frame frame = ws::decode_frame(client);
@@ -569,14 +608,24 @@ static void handle_client(int client)
         {
             std::cerr << "[debug] raw frame (" << frame.payload.size() << " bytes): ["
                       << frame.payload << "]\n";
-            std::string response = route_command(frame.payload, session_id);
-            ws::send_frame(client, 0x1, response);
+            std::string response = route_command(frame.payload, session_id, client);
+            if (!response.empty())
+            {
+                ws::send_frame(client, 0x1, response);
+            }
         }
 
         if (frame.opcode == 0x9)
         {
             ws::send_frame(client, 0xA, frame.payload);
         }
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(clients_mtx);
+        auto it = std::find(active_clients.begin(), active_clients.end(), client);
+        if (it != active_clients.end())
+            active_clients.erase(it);
     }
 
     std::cerr << "[server] client disconnected (fd=" << client << ")\n";
