@@ -99,6 +99,7 @@ bool DBManager::init_schema() {
     try {
         pqxx::work txn(*impl_->conn);
         txn.exec(R"SQL(
+            CREATE EXTENSION IF NOT EXISTS pgcrypto;
             CREATE TABLE IF NOT EXISTS users (
                 id          SERIAL PRIMARY KEY,
                 username    VARCHAR(64) UNIQUE NOT NULL,
@@ -126,8 +127,10 @@ bool DBManager::init_schema() {
             );
             INSERT INTO users (id, username) VALUES (1, 'root')
                 ON CONFLICT DO NOTHING;
+            SELECT setval('users_id_seq', (SELECT MAX(id) FROM users));
             INSERT INTO directories (id, parent_id, name) VALUES (1, NULL, '/')
                 ON CONFLICT DO NOTHING;
+            SELECT setval('directories_id_seq', (SELECT MAX(id) FROM directories));
         )SQL");
         txn.commit();
         std::cerr << "[db] schema initialized\n";
