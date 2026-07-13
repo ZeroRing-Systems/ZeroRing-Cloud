@@ -187,9 +187,24 @@ function connectWebSocket() {
       const content = e.data.substring(nlIndex + 1);
 
       document.getElementById("editor-filename").textContent = path;
-      document.getElementById("editor-textarea").value = content;
+      const ext = path.split('.').pop().toLowerCase();
+      let lang = "plaintext";
+      if (ext === "js") lang = "javascript";
+      else if (ext === "py") lang = "python";
+      else if (ext === "cpp" || ext === "c" || ext === "h") lang = "cpp";
+      else if (ext === "html") lang = "html";
+      else if (ext === "css") lang = "css";
+      else if (ext === "json") lang = "json";
+      else if (ext === "sh") lang = "shell";
+
+      if (window.monacoEditor) {
+        window.monacoEditor.setValue(content);
+        monaco.editor.setModelLanguage(window.monacoEditor.getModel(), lang);
+      }
       document.getElementById("editor-overlay").style.display = "flex";
-      document.getElementById("editor-textarea").focus();
+      if (window.monacoEditor) {
+        window.monacoEditor.focus();
+      }
       currentEditPath = path;
       return;
     }
@@ -267,7 +282,7 @@ function connectWebSocket() {
 
   document.getElementById("editor-save").onclick = function () {
     if (!currentEditPath) return;
-    const content = document.getElementById("editor-textarea").value;
+    const content = window.monacoEditor ? window.monacoEditor.getValue() : "";
     ws.send(
       JSON.stringify({
         cmd: "save",
@@ -768,4 +783,20 @@ document.getElementById("chat-input").addEventListener("keydown", function(e) {
 // Also stop keyup/keypress from bubbling
 document.getElementById("chat-input").addEventListener("keyup", e => e.stopPropagation());
 document.getElementById("chat-input").addEventListener("keypress", e => e.stopPropagation());
+
+// ========== Monaco Editor Setup ==========
+window.monacoEditor = null;
+require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.41.0/min/vs' }});
+require(['vs/editor/editor.main'], function() {
+    window.monacoEditor = monaco.editor.create(document.getElementById('editor-container'), {
+        value: "",
+        language: "plaintext",
+        theme: "vs-dark",
+        automaticLayout: true,
+        minimap: { enabled: false },
+        fontSize: 14,
+        fontFamily: "'JetBrains Mono', monospace"
+    });
+});
+
 

@@ -191,17 +191,10 @@
         padding: 0 16px;
       }
 
-      #editor-textarea {
+      #editor-container {
         flex: 1;
-        background: #1e1e1e;
-        color: #d4d4d4;
+        width: 100%;
         border: none;
-        padding: 1.5rem;
-        font-family: "JetBrains Mono", monospace;
-        font-size: 15px;
-        line-height: 1.6;
-        resize: none;
-        outline: none;
       }
       
       .editor-btn {
@@ -486,10 +479,11 @@
               <button class="editor-btn" id="editor-save">Save File</button>
             </div>
           </div>
-          <textarea id="editor-textarea" spellcheck="false"></textarea>
+          <div id="editor-container"></div>
       </div>
     </div>
     
-    <script src="terminal.js?v=3"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.41.0/min/vs/loader.min.js"></script>
+    <script src="terminal.js?v=4"></script>
   </body>
 </html>
