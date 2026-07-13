@@ -15,9 +15,9 @@ ssh -i "$SSH_KEY" "$VM_USER@$VM_IP" "
   cd ~/ZeroRing-Cloud
   echo '📥 Pulling latest code...'
   git pull origin main
-  echo '🔨 Building...'
+  echo '🔨 Building with PostgreSQL...'
   cd build
-  cmake .. -DUSE_POSTGRES=OFF
+  cmake .. -DUSE_POSTGRES=ON
   make -j\$(nproc)
   echo '🔄 Restarting service...'
   sudo systemctl restart zeroring
