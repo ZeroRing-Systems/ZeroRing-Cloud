@@ -10,12 +10,14 @@ VM_USER="zeroringadmin"
 
 echo "🚀 Deploying ZeroRing Backend to $VM_IP..."
 
+echo "📥 Syncing local code to VM..."
+rsync -avz --exclude="build" --exclude=".git" -e "ssh -i $SSH_KEY" ./ "$VM_USER@$VM_IP:~/ZeroRing-Cloud/"
+
 ssh -i "$SSH_KEY" "$VM_USER@$VM_IP" "
   set -e
   cd ~/ZeroRing-Cloud
-  echo '📥 Pulling latest code...'
-  git pull origin main
   echo '🔨 Building with PostgreSQL...'
+  mkdir -p build
   cd build
   cmake .. -DUSE_POSTGRES=ON
   make -j\$(nproc)
