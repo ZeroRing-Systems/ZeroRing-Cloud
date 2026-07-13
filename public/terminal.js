@@ -127,15 +127,14 @@ function printLine(text) {
 let ws = null;
 let wsReconnectTimer = null;
 
+const BACKEND_WS_URL = "ws://20.193.236.244:8080";
+
 function connectWebSocket() {
     let wsUrl;
     if (location.protocol === "file:") {
         wsUrl = "ws://localhost:8080";
     } else {
-        const proto = location.protocol === "https:" ? "wss:" : "ws:";
-        const host = location.hostname || "localhost";
-        const port = location.port;
-        wsUrl = proto + "//" + host + (port && port !== "80" && port !== "443" ? ":" + port : "") + "/ws";
+        wsUrl = BACKEND_WS_URL;
     }
     ws = new WebSocket(wsUrl);
 
