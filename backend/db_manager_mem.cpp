@@ -169,4 +169,16 @@ bool DBManager::exists(const std::string& path) {
     return impl_->resolve(path) != nullptr;
 }
 
+bool DBManager::register_user(const std::string& username, const std::string& password) {
+    return false; // Not supported in memory mode
+}
+
+bool DBManager::authenticate_user(const std::string& username, const std::string& password) {
+    return false; // Not supported in memory mode
+}
+
+void DBManager::migrate_session_to_user(const std::string& session_id, const std::string& username) {
+    // Not supported in memory mode
+}
+
 #endif

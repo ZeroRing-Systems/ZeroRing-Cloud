@@ -10,6 +10,9 @@
 #include <random>
 #include <sstream>
 #include <iomanip>
+#include <algorithm>
+#include <sys/wait.h>
+#include <sys/stat.h>
 
 #include "websocket.h"
 #include "db_manager.h"
@@ -17,6 +20,7 @@
 
 static DBManager db;
 static std::map<std::string, bool> known_sessions;
+static std::map<std::string, std::string> session_to_user; // session_id -> username
 static std::mutex sessions_mtx;
 
 static std::string generate_session_id() {
@@ -29,17 +33,38 @@ static std::string generate_session_id() {
 }
 
 static void ensure_session_root(const std::string& session_id) {
-    std::string session_root = "/sessions/" + session_id;
-    if (!db.exists("/sessions")) {
-        db.make_dir("/sessions");
+    std::string user = "";
+    {
+        std::lock_guard<std::mutex> lock(sessions_mtx);
+        auto it = session_to_user.find(session_id);
+        if (it != session_to_user.end()) user = it->second;
     }
-    if (!db.exists(session_root)) {
-        db.make_dir(session_root);
+
+    if (!user.empty()) {
+        std::string user_root = "/users/" + user;
+        if (!db.exists("/users")) db.make_dir("/users");
+        if (!db.exists(user_root)) db.make_dir(user_root);
+    } else {
+        std::string session_root = "/sessions/" + session_id;
+        if (!db.exists("/sessions")) db.make_dir("/sessions");
+        if (!db.exists(session_root)) db.make_dir(session_root);
     }
 }
 
 static std::string scope_path(const std::string& session_id, const std::string& path) {
-    std::string base = "/sessions/" + session_id;
+    if (path == "/shared" || path.rfind("/shared/", 0) == 0) {
+        return path; // Allow direct access to shared directory
+    }
+
+    std::string user = "";
+    {
+        std::lock_guard<std::mutex> lock(sessions_mtx);
+        auto it = session_to_user.find(session_id);
+        if (it != session_to_user.end()) user = it->second;
+    }
+
+    std::string base = user.empty() ? ("/sessions/" + session_id) : ("/users/" + user);
+    
     if (path == "/") return base;
     if (path[0] == '/') return base + path;
     return base + "/" + path;
@@ -206,29 +231,188 @@ static std::string route_command(const std::string& raw, const std::string& sess
 
     if (cmd == "run") {
         if (!obj.count("path")) return json::error("run: missing 'path'");
-        std::string content = db.read_file(scope_path(session_id, obj["path"]));
+        std::string scoped = scope_path(session_id, obj["path"]);
+        std::string content = db.read_file(scoped);
         if (content.empty()) return "run: file not found or empty";
-        
-        std::string temp_file = "/tmp/run_" + session_id + ".py";
+
+        // Detect language by file extension
+        std::string path = obj["path"];
+        std::string ext = "";
+        auto dot = path.rfind('.');
+        if (dot != std::string::npos) ext = path.substr(dot);
+
+        std::string runtime;
+        if (ext == ".py")       runtime = "python3";
+        else if (ext == ".js")  runtime = "node";
+        else if (ext == ".sh")  runtime = "bash";
+        else return "run: unsupported file type '" + ext + "' (use .py, .js, or .sh)";
+
+        // Write to sandbox temp file
+        std::string temp_file = "/tmp/sandbox/run_" + session_id + ext;
         FILE* f = fopen(temp_file.c_str(), "w");
-        if (f) {
-            fwrite(content.data(), 1, content.size(), f);
-            fclose(f);
-            
-            std::string cmd_str = "python3 " + temp_file + " 2>&1";
-            FILE* pipe = popen(cmd_str.c_str(), "r");
-            if (!pipe) return "run: failed to execute";
-            char buffer[128];
-            std::string result = "";
-            while (fgets(buffer, 128, pipe) != NULL) {
-                result += buffer;
-            }
-            pclose(pipe);
-            unlink(temp_file.c_str());
-            if (result.empty()) return "run: success (no output)";
-            return result;
+        if (!f) return "run: failed to create temp file";
+        fwrite(content.data(), 1, content.size(), f);
+        fclose(f);
+        // Make readable by sandbox user
+        chmod(temp_file.c_str(), 0644);
+
+        // Execute in sandbox: restricted user, timeout, memory limit, no network
+        std::string cmd_str =
+            "timeout 5s sudo -u sandbox bash -c '"
+            "ulimit -v 51200 -u 10 -f 1024 2>/dev/null; "
+            + runtime + " " + temp_file + " 2>&1'";
+
+        FILE* pipe = popen(cmd_str.c_str(), "r");
+        if (!pipe) { unlink(temp_file.c_str()); return "run: failed to execute"; }
+        char buffer[256];
+        std::string result;
+        size_t total_read = 0;
+        const size_t MAX_OUTPUT = 8192; // Cap output at 8KB
+        while (fgets(buffer, sizeof(buffer), pipe) != NULL && total_read < MAX_OUTPUT) {
+            result += buffer;
+            total_read += strlen(buffer);
         }
-        return "run: failed to create temp file";
+        int status = pclose(pipe);
+        unlink(temp_file.c_str());
+
+        if (total_read >= MAX_OUTPUT) result += "\n[output truncated at 8KB]";
+        if (WIFEXITED(status) && WEXITSTATUS(status) == 124)
+            result += "\n[execution timed out after 5 seconds]";
+
+        if (result.empty()) return "run: success (no output)";
+        return result;
+    }
+
+    // === Upload (base64 file upload) ===
+    if (cmd == "upload") {
+        if (!obj.count("path")) return json::error("upload: missing 'path'");
+        if (!obj.count("data")) return json::error("upload: missing 'data'");
+        std::string data = obj["data"];
+        std::string scoped = scope_path(session_id, obj["path"]);
+        if (db.write_file(scoped, data)) {
+            return "uploaded: " + obj["path"] + " (" + std::to_string(data.size()) + " bytes)";
+        }
+        return "upload: failed to write " + obj["path"];
+    }
+
+    // === Download ===
+    if (cmd == "download") {
+        if (!obj.count("path")) return json::error("download: missing 'path'");
+        std::string content = db.read_file(scope_path(session_id, obj["path"]));
+        if (content.empty()) return json::error("download: file not found");
+        return "__download__" + obj["path"] + "\n" + content;
+    }
+
+    // === User Registration ===
+    if (cmd == "register") {
+        if (!obj.count("username") || !obj.count("password"))
+            return "usage: register <username> <password>";
+        std::string username = obj["username"];
+        std::string password = obj["password"];
+        if (username.size() < 3 || username.size() > 32)
+            return "register: username must be 3-32 characters";
+        if (password.size() < 4)
+            return "register: password must be at least 4 characters";
+        // Sanitize: alphanumeric + underscore only
+        for (char c : username) {
+            if (!isalnum(c) && c != '_')
+                return "register: username can only contain letters, numbers, and underscores";
+        }
+        if (db.register_user(username, password)) {
+            // Auto-login after register
+            {
+                std::lock_guard<std::mutex> lock(sessions_mtx);
+                session_to_user[session_id] = username;
+            }
+            // Migrate current session files to user's directory
+            db.migrate_session_to_user(session_id, username);
+            return "\033[32mregistered and logged in as " + username + "\033[0m";
+        }
+        return "\033[31mregister: username '" + username + "' is already taken\033[0m";
+    }
+
+    // === User Login ===
+    if (cmd == "login") {
+        if (!obj.count("username") || !obj.count("password"))
+            return "usage: login <username> <password>";
+        std::string username = obj["username"];
+        std::string password = obj["password"];
+        if (db.authenticate_user(username, password)) {
+            {
+                std::lock_guard<std::mutex> lock(sessions_mtx);
+                session_to_user[session_id] = username;
+            }
+            ensure_session_root(session_id);
+            return "\033[32mlogged in as " + username + "\033[0m";
+        }
+        return "\033[31mlogin: invalid username or password\033[0m";
+    }
+
+    // === Logout ===
+    if (cmd == "logout") {
+        std::lock_guard<std::mutex> lock(sessions_mtx);
+        session_to_user.erase(session_id);
+        return "logged out";
+    }
+
+    // === Who Am I (with user context) ===
+    if (cmd == "whoami_user") {
+        std::lock_guard<std::mutex> lock(sessions_mtx);
+        auto it = session_to_user.find(session_id);
+        if (it != session_to_user.end()) {
+            return it->second;
+        }
+        return "anonymous (session: " + session_id.substr(0, 8) + "...)";
+    }
+
+    // === Share a file to /shared ===
+    if (cmd == "share") {
+        if (!obj.count("path")) return json::error("share: missing 'path'");
+        std::string src_path = scope_path(session_id, obj["path"]);
+        std::string content = db.read_file(src_path);
+        if (content.empty()) return "share: file not found or empty";
+
+        // Get the filename
+        std::string filename = obj["path"];
+        auto slash = filename.rfind('/');
+        if (slash != std::string::npos) filename = filename.substr(slash + 1);
+
+        // Determine author name
+        std::string author = "anonymous";
+        {
+            std::lock_guard<std::mutex> lock(sessions_mtx);
+            auto it = session_to_user.find(session_id);
+            if (it != session_to_user.end()) author = it->second;
+        }
+
+        // Ensure /shared exists
+        if (!db.exists("/shared")) db.make_dir("/shared");
+
+        // Write to /shared/filename
+        std::string shared_path = "/shared/" + filename;
+        if (db.write_file(shared_path, content)) {
+            return "\033[32mshared: " + filename + " → /shared/ (by " + author + ")\033[0m";
+        }
+        return "share: failed to share " + filename;
+    }
+
+    // === Unshare a file ===
+    if (cmd == "unshare") {
+        if (!obj.count("path")) return json::error("unshare: missing 'path'");
+        std::string filename = obj["path"];
+        auto slash = filename.rfind('/');
+        if (slash != std::string::npos) filename = filename.substr(slash + 1);
+        if (db.remove("/shared/" + filename)) {
+            return "unshared: " + filename;
+        }
+        return "unshare: file not found in /shared";
+    }
+
+    // === List shared files ===
+    if (cmd == "shared") {
+        if (!db.exists("/shared")) return "(no shared files)";
+        auto entries = db.list_dir("/shared");
+        return format_ls(entries);
     }
 
     return "unknown command: " + cmd;

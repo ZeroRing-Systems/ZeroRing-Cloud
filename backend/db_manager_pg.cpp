@@ -102,6 +102,7 @@ bool DBManager::init_schema() {
             CREATE TABLE IF NOT EXISTS users (
                 id          SERIAL PRIMARY KEY,
                 username    VARCHAR(64) UNIQUE NOT NULL,
+                password_hash VARCHAR(255),
                 created_at  TIMESTAMPTZ DEFAULT NOW()
             );
             CREATE TABLE IF NOT EXISTS directories (
@@ -261,6 +262,70 @@ bool DBManager::exists(const std::string& path) {
         return !r.empty();
     } catch (const std::exception& e) {
         return false;
+    }
+}
+
+bool DBManager::register_user(const std::string& username, const std::string& password) {
+    std::lock_guard<std::mutex> lock(impl_->mtx);
+    try {
+        pqxx::work txn(*impl_->conn);
+        auto r = txn.exec_params(
+            "INSERT INTO users (username, password_hash) VALUES ($1, crypt($2, gen_salt('bf'))) ON CONFLICT DO NOTHING RETURNING id",
+            username, password);
+        txn.commit();
+        return !r.empty();
+    } catch (const std::exception& e) {
+        std::cerr << "[db] register_user error: " << e.what() << "\n";
+        return false;
+    }
+}
+
+bool DBManager::authenticate_user(const std::string& username, const std::string& password) {
+    std::lock_guard<std::mutex> lock(impl_->mtx);
+    try {
+        pqxx::work txn(*impl_->conn);
+        auto r = txn.exec_params(
+            "SELECT 1 FROM users WHERE username = $1 AND password_hash = crypt($2, password_hash)",
+            username, password);
+        txn.commit();
+        return !r.empty();
+    } catch (const std::exception& e) {
+        std::cerr << "[db] authenticate_user error: " << e.what() << "\n";
+        return false;
+    }
+}
+
+void DBManager::migrate_session_to_user(const std::string& session_id, const std::string& username) {
+    std::lock_guard<std::mutex> lock(impl_->mtx);
+    try {
+        pqxx::work txn(*impl_->conn);
+        
+        // 1. Get user_id
+        auto u_res = txn.exec_params("SELECT id FROM users WHERE username = $1", username);
+        if (u_res.empty()) return;
+        int64_t user_id = u_res[0][0].as<int64_t>();
+
+        // 2. Ensure /users/username exists
+        int64_t root_id = impl_->resolve_dir(txn, "/");
+        txn.exec_params("INSERT INTO directories (parent_id, name, owner_id) VALUES ($1, 'users', 1) ON CONFLICT DO NOTHING", root_id);
+        int64_t users_dir_id = impl_->resolve_dir(txn, "/users");
+        
+        txn.exec_params("INSERT INTO directories (parent_id, name, owner_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", users_dir_id, username, user_id);
+        int64_t user_dir_id = impl_->resolve_dir(txn, "/users/" + username);
+
+        // 3. Move contents of /sessions/session_id to /users/username
+        int64_t old_dir_id = impl_->resolve_dir(txn, "/sessions/" + session_id);
+        if (old_dir_id >= 0) {
+            // Update owner of subdirectories and files
+            txn.exec_params("UPDATE directories SET parent_id = $1, owner_id = $2 WHERE parent_id = $3", user_dir_id, user_id, old_dir_id);
+            txn.exec_params("UPDATE files SET directory_id = $1, owner_id = $2 WHERE directory_id = $3", user_dir_id, user_id, old_dir_id);
+            
+            // Remove old session dir
+            txn.exec_params("DELETE FROM directories WHERE id = $1", old_dir_id);
+        }
+        txn.commit();
+    } catch (const std::exception& e) {
+        std::cerr << "[db] migrate_session error: " << e.what() << "\n";
     }
 }
 

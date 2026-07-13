@@ -26,6 +26,11 @@ public:
     bool remove(const std::string& path);
     bool exists(const std::string& path);
 
+    // User Management
+    bool register_user(const std::string& username, const std::string& password);
+    bool authenticate_user(const std::string& username, const std::string& password);
+    void migrate_session_to_user(const std::string& session_id, const std::string& username);
+
 private:
     struct Impl;
     Impl* impl_;

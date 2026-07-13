@@ -167,6 +167,46 @@ function connectWebSocket() {
             currentEditPath = path;
             return;
         }
+        if (typeof e.data === "string" && e.data.startsWith("__download__")) {
+            const nlIndex = e.data.indexOf("\n");
+            const path = e.data.substring(12, nlIndex);
+            const content = e.data.substring(nlIndex + 1);
+            
+            const filename = path.split('/').pop();
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            printLine("\x1b[32mdownloaded: " + path + "\x1b[0m");
+            return;
+        }
+        if (typeof e.data === "string" && e.data.startsWith("__upload__")) {
+            const path = e.data.slice(10);
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.onchange = ev => {
+                const file = ev.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = readEv => {
+                    const content = readEv.target.result;
+                    ws.send(JSON.stringify({
+                        cmd: "upload",
+                        path: path,
+                        data: content
+                    }));
+                };
+                reader.readAsText(file); // Note: assumes text files for now
+            };
+            input.click();
+            return;
+        }
         if (wasmInstance && wasmInstance.exports.handle_net_response) {
             const ptr = writeCStr(e.data);
             wasmInstance.exports.handle_net_response(ptr);
@@ -380,6 +420,37 @@ document.addEventListener("keydown", function (e) {
 
 terminal.addEventListener("click", function () {
     terminal.focus();
+});
+
+terminal.addEventListener("dragover", function(e) {
+    e.preventDefault();
+    terminal.style.backgroundColor = "rgba(255, 255, 255, 0.05)";
+});
+
+terminal.addEventListener("dragleave", function(e) {
+    e.preventDefault();
+    terminal.style.backgroundColor = "";
+});
+
+terminal.addEventListener("drop", function(e) {
+    e.preventDefault();
+    terminal.style.backgroundColor = "";
+    if (e.dataTransfer.files.length > 0) {
+        const file = e.dataTransfer.files[0];
+        const reader = new FileReader();
+        reader.onload = evt => {
+            const content = evt.target.result;
+            const path = currentCwd === "/" ? ("/" + file.name) : (currentCwd + "/" + file.name);
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    cmd: "upload",
+                    path: path,
+                    data: content
+                }));
+            }
+        };
+        reader.readAsText(file);
+    }
 });
 
 WebAssembly.instantiateStreaming(fetch("wasm/kernel.wasm?v=" + Date.now()), imports)
