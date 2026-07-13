@@ -45,21 +45,18 @@
         z-index: 10;
         box-shadow: 0 4px 20px rgba(0,0,0,0.5);
       }
-      .dots {
+      .back-container {
         display: flex;
-        gap: 8px;
         flex: 1;
       }
-      .dot {
-        width: 13px;
-        height: 13px;
-        border-radius: 50%;
+      .back-btn {
+        color: #71717a;
         transition: 0.2s;
+        display: flex;
+        align-items: center;
+        text-decoration: none;
       }
-      .dot:hover { filter: brightness(1.2); }
-      .dot.red { background-color: #ff5f56; }
-      .dot.yellow { background-color: #ffbd2e; }
-      .dot.green { background-color: #27c93f; }
+      .back-btn:hover { color: #fff; }
       .title {
         color: #71717a;
         font-size: 0.85rem;
@@ -225,10 +222,10 @@
   </head>
   <body>
     <div id="titlebar">
-        <div class="dots">
-            <a href="index.html" class="dot red" title="Close Terminal"></a>
-            <div class="dot yellow"></div>
-            <div class="dot green"></div>
+        <div class="back-container">
+            <a href="index.html" class="back-btn" title="Back to Home">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+            </a>
         </div>
         <div class="title">bash — ZeroRing OS</div>
         <div class="spacer"></div>
