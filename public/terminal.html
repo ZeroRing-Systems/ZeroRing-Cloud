@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>ZeroRing Terminal</title>
     <!-- Vercel Analytics -->
     <script>
@@ -429,6 +429,142 @@
         padding: 0 4px;
         display: none;
       }
+
+      /* Mobile Virtual Toolbar */
+      #mobile-toolbar {
+        display: none;
+        flex-shrink: 0;
+        background: #111114;
+        border-top: 1px solid var(--border);
+        padding: 6px 8px;
+        gap: 6px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        z-index: 20;
+      }
+      #mobile-toolbar::-webkit-scrollbar { height: 0; }
+
+      .tb-group {
+        display: flex;
+        gap: 4px;
+        flex-shrink: 0;
+      }
+      .tb-sep {
+        width: 1px;
+        background: rgba(255,255,255,0.1);
+        margin: 4px 2px;
+        flex-shrink: 0;
+      }
+
+      .tb-btn {
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.12);
+        color: #a1a1aa;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 13px;
+        font-weight: 600;
+        padding: 8px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: background 0.1s, color 0.1s;
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+        user-select: none;
+        flex-shrink: 0;
+      }
+      .tb-btn:active {
+        background: rgba(99,102,241,0.3);
+        color: #fff;
+        border-color: #6366f1;
+      }
+      .tb-btn.accent {
+        background: rgba(99,102,241,0.15);
+        border-color: rgba(99,102,241,0.3);
+        color: #a5b4fc;
+      }
+      .tb-btn.accent:active {
+        background: #6366f1;
+        color: #fff;
+      }
+
+      /* Hidden input for mobile keyboard */
+      #mobile-input {
+        position: absolute;
+        left: -9999px;
+        top: -9999px;
+        opacity: 0;
+        width: 1px;
+        height: 1px;
+      }
+
+      /* ===== MOBILE RESPONSIVE ===== */
+      @media (max-width: 768px) {
+        body { font-size: 13px; }
+
+        #titlebar {
+          padding: 8px 10px;
+        }
+        .title {
+          font-size: 0.75rem;
+          letter-spacing: 0.3px;
+        }
+        .chat-toggle {
+          padding: 4px 8px;
+          font-size: 12px;
+          margin-right: 6px;
+        }
+        .chat-toggle span:first-child { display: none; } /* hide emoji on tiny screens */
+
+        #terminal {
+          padding: 12px;
+        }
+        #input-line {
+          padding-bottom: 10px;
+        }
+
+        #output div {
+          line-height: 1.5;
+          font-size: 12px;
+        }
+
+        #mobile-toolbar {
+          display: flex;
+        }
+
+        /* Chat panel goes full-width on mobile */
+        #chat-panel {
+          width: 100%;
+          border-left: none;
+          border-top: 1px solid rgba(255,255,255,0.08);
+        }
+
+        /* Editor responsive */
+        #editor-overlay {
+          padding: 0.5rem;
+        }
+        .editor-window {
+          border-radius: 8px;
+          height: 90vh;
+        }
+        .editor-actions {
+          padding: 0 8px;
+        }
+        .editor-btn {
+          padding: 5px 10px;
+          font-size: 12px;
+        }
+      }
+
+      @media (max-width: 480px) {
+        body { font-size: 12px; }
+        #titlebar { padding: 6px 8px; }
+        .title { font-size: 0.7rem; }
+        #terminal { padding: 8px; }
+        #output div { font-size: 11px; line-height: 1.4; }
+        .tb-btn { padding: 7px 10px; font-size: 12px; }
+        .back-btn svg { width: 14px; height: 14px; }
+      }
     </style>
   </head>
   <body>
@@ -450,6 +586,34 @@
       <div id="output"></div>
       <div id="input-line">
           <span id="prompt"></span><span id="cmd"></span>
+      </div>
+    </div>
+
+    <!-- Hidden input for mobile keyboard trigger -->
+    <input type="text" id="mobile-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
+
+    <!-- Mobile Virtual Toolbar -->
+    <div id="mobile-toolbar">
+      <div class="tb-group">
+        <button class="tb-btn" data-action="up" aria-label="Up">▲</button>
+        <button class="tb-btn" data-action="down" aria-label="Down">▼</button>
+        <button class="tb-btn" data-action="left" aria-label="Left">◀</button>
+        <button class="tb-btn" data-action="right" aria-label="Right">▶</button>
+      </div>
+      <div class="tb-sep"></div>
+      <div class="tb-group">
+        <button class="tb-btn accent" data-action="tab" aria-label="Tab">Tab</button>
+        <button class="tb-btn accent" data-action="ctrl-c" aria-label="Ctrl+C">^C</button>
+        <button class="tb-btn accent" data-action="ctrl-v" aria-label="Ctrl+V">^V</button>
+      </div>
+      <div class="tb-sep"></div>
+      <div class="tb-group">
+        <button class="tb-btn" data-action="pipe" aria-label="Pipe">|</button>
+        <button class="tb-btn" data-action="redir" aria-label="Redirect">&gt;</button>
+        <button class="tb-btn" data-action="tilde" aria-label="Tilde">~</button>
+        <button class="tb-btn" data-action="slash" aria-label="Slash">/</button>
+        <button class="tb-btn" data-action="dash" aria-label="Dash">-</button>
+        <button class="tb-btn" data-action="at" aria-label="At">@</button>
       </div>
     </div>
 
@@ -490,6 +654,6 @@
     </div>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.41.0/min/vs/loader.min.js"></script>
-    <script src="terminal.js?v=4"></script>
+    <script src="terminal.js?v=5"></script>
   </body>
 </html>

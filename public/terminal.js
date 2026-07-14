@@ -525,8 +525,166 @@ document.addEventListener("keydown", function (e) {
   }
 });
 
+// ===== MOBILE SUPPORT =====
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+const mobileInput = document.getElementById("mobile-input");
+
 terminal.addEventListener("click", function () {
-  terminal.focus();
+  if (isMobile && mobileInput) {
+    mobileInput.focus();
+  } else {
+    terminal.focus();
+  }
+});
+
+// Mobile hidden input handler — captures keyboard input on mobile
+if (mobileInput) {
+  let mobileComposing = false;
+  
+  mobileInput.addEventListener("compositionstart", () => { mobileComposing = true; });
+  mobileInput.addEventListener("compositionend", () => { mobileComposing = false; });
+
+  mobileInput.addEventListener("input", function (e) {
+    if (mobileComposing) return;
+    if (!wasmInstance) return;
+    const val = mobileInput.value;
+    if (val.length > 0) {
+      // Process each character
+      for (let i = 0; i < val.length; i++) {
+        const ch = val[i];
+        feedKey(ch.charCodeAt(0));
+        let idx = inputCursorIndex === -1 ? currentCmdLine.length : inputCursorIndex;
+        const newCmd = currentCmdLine.slice(0, idx) + ch + currentCmdLine.slice(idx);
+        updateCmd(newCmd, inputCursorIndex === -1 ? -1 : idx + 1);
+      }
+      mobileInput.value = "";
+    }
+  });
+
+  mobileInput.addEventListener("keydown", function (e) {
+    if (e.target !== mobileInput) return;
+    if (e.key === "Enter") {
+      e.preventDefault();
+      // Trigger Enter on the terminal
+      const cmd = currentCmdLine;
+      const echoDiv = document.createElement("div");
+      echoDiv.className = "echo-line";
+      echoDiv.innerHTML = formatPromptHTML(currentPrompt) + `<span class="command-text">${escapeHTML(cmd)}</span>`;
+      output.appendChild(echoDiv);
+      terminal.scrollTop = terminal.scrollHeight;
+      if (cmd.trim().length > 0) {
+        commandHistory.push(cmd);
+      }
+      historyIndex = -1;
+      savedInput = "";
+      feedKey(13);
+      updateCmd("");
+      mobileInput.value = "";
+      return;
+    }
+    if (e.key === "Backspace") {
+      e.preventDefault();
+      let idx = inputCursorIndex === -1 ? currentCmdLine.length : inputCursorIndex;
+      if (idx > 0) {
+        const newCmd = currentCmdLine.slice(0, idx - 1) + currentCmdLine.slice(idx);
+        feedKey(8);
+        updateCmd(newCmd, inputCursorIndex === -1 ? -1 : idx - 1);
+      }
+      mobileInput.value = "";
+      return;
+    }
+  });
+}
+
+// Mobile toolbar button handler
+function simulateKey(action) {
+  if (!wasmInstance) return;
+  switch (action) {
+    case "up": {
+      if (commandHistory.length === 0) return;
+      if (historyIndex === -1) savedInput = currentCmdLine;
+      if (historyIndex < commandHistory.length - 1) historyIndex++;
+      updateCmd(commandHistory[commandHistory.length - 1 - historyIndex]);
+      break;
+    }
+    case "down": {
+      if (historyIndex === -1) return;
+      historyIndex--;
+      updateCmd(historyIndex === -1 ? savedInput : commandHistory[commandHistory.length - 1 - historyIndex]);
+      break;
+    }
+    case "left": {
+      let idx = inputCursorIndex === -1 ? currentCmdLine.length : inputCursorIndex;
+      if (idx > 0) updateCmd(currentCmdLine, idx - 1);
+      break;
+    }
+    case "right": {
+      let idx = inputCursorIndex === -1 ? currentCmdLine.length : inputCursorIndex;
+      if (idx < currentCmdLine.length) {
+        let nextIdx = idx + 1;
+        if (nextIdx === currentCmdLine.length) nextIdx = -1;
+        updateCmd(currentCmdLine, nextIdx);
+      }
+      break;
+    }
+    case "tab": {
+      const parts = currentCmdLine.split(/\s+/);
+      pendingTabPrefix = parts[parts.length - 1] || "";
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ cmd: "complete", path: currentCwd }));
+      }
+      break;
+    }
+    case "ctrl-c": {
+      const selection = window.getSelection().toString();
+      if (selection) {
+        navigator.clipboard.writeText(selection);
+      } else {
+        navigator.clipboard.writeText(currentCmdLine);
+      }
+      break;
+    }
+    case "ctrl-v": {
+      navigator.clipboard.readText().then(function (text) {
+        const clean = text.replace(/[\r\n]/g, "");
+        let idx = inputCursorIndex === -1 ? currentCmdLine.length : inputCursorIndex;
+        const newCmd = currentCmdLine.slice(0, idx) + clean + currentCmdLine.slice(idx);
+        updateCmd(newCmd, inputCursorIndex === -1 ? -1 : idx + clean.length);
+      });
+      break;
+    }
+    // Character insertion buttons
+    case "pipe":
+    case "redir":
+    case "tilde":
+    case "slash":
+    case "dash":
+    case "at": {
+      const charMap = { pipe: "|", redir: ">", tilde: "~", slash: "/", dash: "-", at: "@" };
+      const ch = charMap[action];
+      feedKey(ch.charCodeAt(0));
+      let idx = inputCursorIndex === -1 ? currentCmdLine.length : inputCursorIndex;
+      const newCmd = currentCmdLine.slice(0, idx) + ch + currentCmdLine.slice(idx);
+      updateCmd(newCmd, inputCursorIndex === -1 ? -1 : idx + 1);
+      break;
+    }
+  }
+}
+
+// Attach touch events to toolbar buttons
+document.querySelectorAll("#mobile-toolbar .tb-btn").forEach(function (btn) {
+  btn.addEventListener("touchstart", function (e) {
+    e.preventDefault();
+    const action = btn.getAttribute("data-action");
+    if (action) simulateKey(action);
+    // Keep mobile keyboard open
+    if (mobileInput) mobileInput.focus();
+  });
+  btn.addEventListener("click", function (e) {
+    e.preventDefault();
+    const action = btn.getAttribute("data-action");
+    if (action) simulateKey(action);
+  });
 });
 
 terminal.addEventListener("dragover", function (e) {
