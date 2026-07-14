@@ -305,6 +305,32 @@ static std::string route_command(const std::string& raw, const std::string& sess
         return "rm: failed to remove " + obj["path"] + " (not found or not empty)";
     }
 
+    if (cmd == "mv")
+    {
+        if (!obj.count("src") || !obj.count("dest"))
+            return json::error("mv: missing 'src' or 'dest'");
+        std::string scoped_src = scope_path(session_id, obj["src"]);
+        std::string scoped_dest = scope_path(session_id, obj["dest"]);
+        if (db.rename(scoped_src, scoped_dest))
+        {
+            return "mv: moved " + obj["src"] + " -> " + obj["dest"];
+        }
+        return "mv: failed to move '" + obj["src"] + "' to '" + obj["dest"] + "' (check paths)";
+    }
+
+    if (cmd == "cp")
+    {
+        if (!obj.count("src") || !obj.count("dest"))
+            return json::error("cp: missing 'src' or 'dest'");
+        std::string scoped_src = scope_path(session_id, obj["src"]);
+        std::string scoped_dest = scope_path(session_id, obj["dest"]);
+        if (db.copy(scoped_src, scoped_dest))
+        {
+            return "cp: copied " + obj["src"] + " -> " + obj["dest"];
+        }
+        return "cp: failed to copy '" + obj["src"] + "' to '" + obj["dest"] + "' (check paths)";
+    }
+
     if (cmd == "edit")
     {
         if (!obj.count("path"))

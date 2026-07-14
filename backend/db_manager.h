@@ -25,6 +25,8 @@ public:
     bool write_file(const std::string& path, const std::string& data);
     bool remove(const std::string& path);
     bool exists(const std::string& path);
+    bool rename(const std::string& old_path, const std::string& new_path);
+    bool copy(const std::string& old_path, const std::string& new_path);
 
     // User Management
     bool register_user(const std::string& username, const std::string& password);

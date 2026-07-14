@@ -265,6 +265,119 @@ bool DBManager::exists(const std::string& path) {
         return !r.empty();
     } catch (const std::exception& e) {
         return false;
+}
+
+bool DBManager::rename(const std::string& old_path_in, const std::string& new_path_in) {
+    std::lock_guard<std::mutex> lock(impl_->mtx);
+    try {
+        pqxx::work txn(*impl_->conn);
+        std::string old_path = path_util::clean_trailing(old_path_in);
+        std::string new_path = path_util::clean_trailing(new_path_in);
+        if (old_path.empty() || new_path.empty() || old_path == "/" || new_path == "/" || old_path == new_path) {
+            return false;
+        }
+
+        int64_t old_dir_id = impl_->resolve_dir(txn, old_path);
+        if (old_dir_id >= 0) {
+            // Moving or renaming a directory
+            std::string target_path = new_path;
+            if (impl_->resolve_dir(txn, new_path) >= 0) {
+                target_path = new_path + "/" + path_util::basename(old_path);
+            }
+            if (target_path == old_path || target_path.rfind(old_path + "/", 0) == 0) {
+                return false; // cannot move directory into itself
+            }
+            std::string target_parent = path_util::parent(target_path);
+            std::string target_name = path_util::basename(target_path);
+            int64_t target_parent_id = impl_->resolve_dir(txn, target_parent);
+            if (target_parent_id < 0) {
+                return false;
+            }
+            auto rd = txn.exec_params("SELECT 1 FROM directories WHERE parent_id = $1 AND name = $2", target_parent_id, target_name);
+            auto rf = txn.exec_params("SELECT 1 FROM files WHERE directory_id = $1 AND name = $2", target_parent_id, target_name);
+            if (!rd.empty() || !rf.empty()) {
+                return false;
+            }
+            txn.exec_params("UPDATE directories SET parent_id = $1, name = $2 WHERE id = $3", target_parent_id, target_name, old_dir_id);
+            txn.commit();
+            return true;
+        } else {
+            // It might be a file
+            std::string old_parent = path_util::parent(old_path);
+            std::string old_name = path_util::basename(old_path);
+            int64_t old_parent_id = impl_->resolve_dir(txn, old_parent);
+            if (old_parent_id < 0) return false;
+            auto r = txn.exec_params("SELECT id FROM files WHERE directory_id = $1 AND name = $2", old_parent_id, old_name);
+            if (r.empty()) return false;
+            int64_t file_id = r[0][0].as<int64_t>();
+
+            std::string target_path = new_path;
+            if (impl_->resolve_dir(txn, new_path) >= 0) {
+                target_path = new_path + "/" + old_name;
+            }
+            std::string target_parent = path_util::parent(target_path);
+            std::string target_name = path_util::basename(target_path);
+            int64_t target_parent_id = impl_->resolve_dir(txn, target_parent);
+            if (target_parent_id < 0) {
+                return false;
+            }
+            auto rd = txn.exec_params("SELECT 1 FROM directories WHERE parent_id = $1 AND name = $2", target_parent_id, target_name);
+            if (!rd.empty()) return false;
+
+            txn.exec_params("DELETE FROM files WHERE directory_id = $1 AND name = $2 AND id != $3", target_parent_id, target_name, file_id);
+            txn.exec_params("UPDATE files SET directory_id = $1, name = $2, updated_at = NOW() WHERE id = $3", target_parent_id, target_name, file_id);
+            txn.commit();
+            return true;
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "[db] rename error: " << e.what() << "\n";
+        return false;
+    }
+}
+
+bool DBManager::copy(const std::string& old_path_in, const std::string& new_path_in) {
+    std::lock_guard<std::mutex> lock(impl_->mtx);
+    try {
+        pqxx::work txn(*impl_->conn);
+        std::string old_path = path_util::clean_trailing(old_path_in);
+        std::string new_path = path_util::clean_trailing(new_path_in);
+        if (old_path.empty() || new_path.empty() || old_path == "/" || new_path == "/" || old_path == new_path) {
+            return false;
+        }
+
+        std::string old_parent = path_util::parent(old_path);
+        std::string old_name = path_util::basename(old_path);
+        int64_t old_parent_id = impl_->resolve_dir(txn, old_parent);
+        if (old_parent_id < 0) return false;
+        auto r = txn.exec_params("SELECT data, size FROM files WHERE directory_id = $1 AND name = $2", old_parent_id, old_name);
+        if (r.empty()) return false;
+        std::string data = r[0][0].as<std::string>();
+        int64_t size = r[0][1].as<int64_t>();
+
+        std::string target_path = new_path;
+        if (impl_->resolve_dir(txn, new_path) >= 0) {
+            target_path = new_path + "/" + old_name;
+        }
+        std::string target_parent = path_util::parent(target_path);
+        std::string target_name = path_util::basename(target_path);
+        int64_t target_parent_id = impl_->resolve_dir(txn, target_parent);
+        if (target_parent_id < 0) {
+            return false;
+        }
+        auto rd = txn.exec_params("SELECT 1 FROM directories WHERE parent_id = $1 AND name = $2", target_parent_id, target_name);
+        if (!rd.empty()) return false;
+
+        txn.exec_params(
+            "INSERT INTO files (directory_id, name, data, size) "
+            "VALUES ($1, $2, $3, $4) "
+            "ON CONFLICT (directory_id, name) DO UPDATE "
+            "SET data = EXCLUDED.data, size = EXCLUDED.size, updated_at = NOW()",
+            target_parent_id, target_name, data, size);
+        txn.commit();
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "[db] copy error: " << e.what() << "\n";
+        return false;
     }
 }
 

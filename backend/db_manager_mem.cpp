@@ -170,6 +170,71 @@ bool DBManager::exists(const std::string& path) {
     return impl_->resolve(path) != nullptr;
 }
 
+bool DBManager::rename(const std::string& old_path, const std::string& new_path) {
+    std::lock_guard<std::mutex> lock(impl_->mtx);
+    if (old_path.empty() || new_path.empty() || old_path == "/" || new_path == "/" || old_path == new_path) return false;
+    std::string old_name;
+    VFSNode* old_parent = impl_->resolve_parent(old_path, old_name);
+    if (!old_parent) return false;
+    auto it = old_parent->children.find(old_name);
+    if (it == old_parent->children.end()) return false;
+    VFSNode* node = it->second;
+
+    std::string target_path = new_path;
+    VFSNode* target_node = impl_->resolve(new_path);
+    if (target_node && target_node->is_dir) {
+        target_path = new_path + "/" + old_name;
+    }
+    if (node->is_dir && (target_path == old_path || target_path.rfind(old_path + "/", 0) == 0)) {
+        return false;
+    }
+
+    std::string new_name;
+    VFSNode* new_parent = impl_->resolve_parent(target_path, new_name);
+    if (!new_parent || !new_parent->is_dir) return false;
+
+    auto dest_it = new_parent->children.find(new_name);
+    if (dest_it != new_parent->children.end()) {
+        if (dest_it->second->is_dir || node->is_dir) return false;
+        delete dest_it->second;
+        new_parent->children.erase(dest_it);
+    }
+
+    old_parent->children.erase(it);
+    node->name = new_name;
+    new_parent->children[new_name] = node;
+    return true;
+}
+
+bool DBManager::copy(const std::string& old_path, const std::string& new_path) {
+    std::lock_guard<std::mutex> lock(impl_->mtx);
+    if (old_path.empty() || new_path.empty() || old_path == "/" || new_path == "/" || old_path == new_path) return false;
+    VFSNode* node = impl_->resolve(old_path);
+    if (!node || node->is_dir) return false;
+
+    std::string target_path = new_path;
+    VFSNode* target_node = impl_->resolve(new_path);
+    if (target_node && target_node->is_dir) {
+        target_path = new_path + "/" + node->name;
+    }
+
+    std::string new_name;
+    VFSNode* new_parent = impl_->resolve_parent(target_path, new_name);
+    if (!new_parent || !new_parent->is_dir) return false;
+
+    auto dest_it = new_parent->children.find(new_name);
+    if (dest_it != new_parent->children.end()) {
+        if (dest_it->second->is_dir) return false;
+        dest_it->second->data = node->data;
+        return true;
+    }
+
+    VFSNode* copy_node = new VFSNode(new_name, false);
+    copy_node->data = node->data;
+    new_parent->children[new_name] = copy_node;
+    return true;
+}
+
 bool DBManager::register_user(const std::string& username, const std::string& password) {
     std::lock_guard<std::mutex> lock(impl_->mtx);
     if (impl_->users.count(username)) return false;
