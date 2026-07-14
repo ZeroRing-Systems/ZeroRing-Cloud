@@ -587,42 +587,51 @@ static std::string route_command(const std::string& raw, const std::string& sess
         if (dot != std::string::npos)
             ext = path.substr(dot);
 
-        std::string runtime;
-        if (ext == ".py")
-            runtime = "python3";
-        else if (ext == ".js")
-            runtime = "node";
-        else if (ext == ".sh")
-            runtime = "bash";
-        else
-            return "run: unsupported file type '" + ext + "' (use .py, .js, or .sh)";
+        struct LangConfig {
+            bool is_compiled;
+            std::string image;
+            std::string command;
+        };
 
-        // Write to tmp file
-        std::string temp_file = "/tmp/run_" + session_id + ext;
+        std::map<std::string, LangConfig> dispatch = {
+            {".py",  {false, "python:3.9-slim",      "python3 /app/script.py"}},
+            {".js",  {false, "node:18-slim",         "node /app/script.js"}},
+            {".sh",  {false, "ubuntu:22.04",         "bash /app/script.sh"}},
+            {".cpp", {true,  "gcc:13",               "cd /app && g++ script.cpp -o out && ./out"}},
+            {".rs",  {true,  "rust:slim",            "cd /app && rustc script.rs -o out && ./out"}},
+            {".go",  {true,  "golang:1.21-alpine",   "cd /app && go run script.go"}}
+        };
+
+        if (dispatch.find(ext) == dispatch.end())
+            return "run: unsupported file type '" + ext + "' (supported: .py, .js, .sh, .cpp, .rs, .go)";
+
+        auto cfg = dispatch[ext];
+
+        // Create temporary directory for the execution context
+        std::string tmp_dir = "/tmp/run_" + session_id;
+        system(("rm -rf " + tmp_dir + " && mkdir -p " + tmp_dir + " && chmod 777 " + tmp_dir).c_str());
+
+        std::string temp_file = tmp_dir + "/script" + ext;
         FILE* f = fopen(temp_file.c_str(), "w");
         if (!f)
             return "run: failed to create temp file";
         fwrite(content.data(), 1, content.size(), f);
         fclose(f);
-        // Make readable by sandbox user
-        chmod(temp_file.c_str(), 0644);
+        chmod(temp_file.c_str(), 0666);
 
         // Execute in strict ephemeral Docker container
-        std::string docker_img = "";
-        if (ext == ".py") docker_img = "python:3.9-slim python3";
-        else if (ext == ".js") docker_img = "node:18-slim node";
-        else if (ext == ".sh") docker_img = "ubuntu:22.04 bash";
-
+        std::string mount_type = cfg.is_compiled ? ":/app" : ":/app:ro";
         std::string cmd_str = "timeout 10s docker run --rm --network none -m 128m --cpus=\"0.5\" "
-                              "-v " + temp_file + ":" + temp_file + ":ro " +
-                              docker_img + " " + temp_file + " 2>&1";
+                              "-v " + tmp_dir + mount_type + " " +
+                              cfg.image + " sh -c '" + cfg.command + "' 2>&1";
 
         FILE* pipe = popen(cmd_str.c_str(), "r");
         if (!pipe)
         {
-            unlink(temp_file.c_str());
+            system(("rm -rf " + tmp_dir).c_str());
             return "run: failed to execute";
         }
+        
         char buffer[256];
         std::string result;
         size_t total_read = 0;
@@ -633,7 +642,7 @@ static std::string route_command(const std::string& raw, const std::string& sess
             total_read += strlen(buffer);
         }
         int status = pclose(pipe);
-        unlink(temp_file.c_str());
+        system(("rm -rf " + tmp_dir).c_str());
 
         if (total_read >= MAX_OUTPUT)
             result += "\n[output truncated at 8KB]";
