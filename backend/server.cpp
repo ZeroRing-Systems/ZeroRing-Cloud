@@ -433,9 +433,8 @@ static std::string route_command(const std::string& raw, const std::string& sess
                 std::lock_guard<std::mutex> lock(sessions_mtx);
                 session_to_user[session_id] = username;
             }
-            // Migrate current session files to user's directory
-            db.migrate_session_to_user(session_id, username);
-            return "\033[32mregistered and logged in as " + username + "\033[0m";
+            ensure_session_root(session_id);
+            return "__reset__\033[32mregistered and logged in as " + username + "\033[0m";
         }
         return "\033[31mregister: username '" + username + "' is already taken\033[0m";
     }
@@ -454,7 +453,7 @@ static std::string route_command(const std::string& raw, const std::string& sess
                 session_to_user[session_id] = username;
             }
             ensure_session_root(session_id);
-            return "\033[32mlogged in as " + username + "\033[0m";
+            return "__reset__\033[32mlogged in as " + username + "\033[0m";
         }
         return "\033[31mlogin: invalid username or password\033[0m";
     }
@@ -464,7 +463,7 @@ static std::string route_command(const std::string& raw, const std::string& sess
     {
         std::lock_guard<std::mutex> lock(sessions_mtx);
         session_to_user.erase(session_id);
-        return "logged out";
+        return "__reset__logged out";
     }
 
     // === Who Am I (with user context) ===
