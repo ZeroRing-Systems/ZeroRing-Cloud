@@ -111,6 +111,7 @@ bool DBManager::init_schema() {
                 parent_id   INTEGER REFERENCES directories(id) ON DELETE CASCADE,
                 owner_id    INTEGER REFERENCES users(id) DEFAULT 1,
                 name        VARCHAR(255) NOT NULL,
+                permissions INTEGER DEFAULT 493,
                 created_at  TIMESTAMPTZ DEFAULT NOW(),
                 UNIQUE(parent_id, name)
             );
@@ -121,14 +122,17 @@ bool DBManager::init_schema() {
                 name        VARCHAR(255) NOT NULL,
                 data        TEXT DEFAULT '',
                 size        BIGINT DEFAULT 0,
+                permissions INTEGER DEFAULT 420,
                 created_at  TIMESTAMPTZ DEFAULT NOW(),
                 updated_at  TIMESTAMPTZ DEFAULT NOW(),
                 UNIQUE(directory_id, name)
             );
+            ALTER TABLE directories ADD COLUMN IF NOT EXISTS permissions INTEGER DEFAULT 493;
+            ALTER TABLE files ADD COLUMN IF NOT EXISTS permissions INTEGER DEFAULT 420;
             INSERT INTO users (id, username) VALUES (1, 'root')
                 ON CONFLICT DO NOTHING;
             SELECT setval('users_id_seq', (SELECT MAX(id) FROM users));
-            INSERT INTO directories (id, parent_id, name) VALUES (1, NULL, '/')
+            INSERT INTO directories (id, parent_id, name, permissions) VALUES (1, NULL, '/', 493)
                 ON CONFLICT DO NOTHING;
             SELECT setval('directories_id_seq', (SELECT MAX(id) FROM directories));
         )SQL");
@@ -149,13 +153,13 @@ std::vector<VFSEntry> DBManager::list_dir(const std::string& path) {
         int64_t dir_id = impl_->resolve_dir(txn, path);
         if (dir_id < 0) return entries;
         auto dirs = txn.exec_params(
-            "SELECT name FROM directories WHERE parent_id = $1 ORDER BY name", dir_id);
+            "SELECT name, COALESCE(permissions, 493) FROM directories WHERE parent_id = $1 ORDER BY name", dir_id);
         for (const auto& row : dirs)
-            entries.push_back({row[0].as<std::string>(), true, -1});
+            entries.push_back({row[0].as<std::string>(), true, -1, row[1].as<int>()});
         auto files = txn.exec_params(
-            "SELECT name, size FROM files WHERE directory_id = $1 ORDER BY name", dir_id);
+            "SELECT name, size, COALESCE(permissions, 420) FROM files WHERE directory_id = $1 ORDER BY name", dir_id);
         for (const auto& row : files)
-            entries.push_back({row[0].as<std::string>(), false, row[1].as<int64_t>()});
+            entries.push_back({row[0].as<std::string>(), false, row[1].as<int64_t>(), row[2].as<int>()});
         txn.commit();
     } catch (const std::exception& e) {
         std::cerr << "[db] list_dir error: " << e.what() << "\n";
@@ -350,10 +354,11 @@ bool DBManager::copy(const std::string& old_path_in, const std::string& new_path
         std::string old_name = path_util::basename(old_path);
         int64_t old_parent_id = impl_->resolve_dir(txn, old_parent);
         if (old_parent_id < 0) return false;
-        auto r = txn.exec_params("SELECT data, size FROM files WHERE directory_id = $1 AND name = $2", old_parent_id, old_name);
+        auto r = txn.exec_params("SELECT data, size, COALESCE(permissions, 420) FROM files WHERE directory_id = $1 AND name = $2", old_parent_id, old_name);
         if (r.empty()) return false;
         std::string data = r[0][0].as<std::string>();
         int64_t size = r[0][1].as<int64_t>();
+        int permissions = r[0][2].as<int>();
 
         std::string target_path = new_path;
         if (impl_->resolve_dir(txn, new_path) >= 0) {
@@ -369,16 +374,70 @@ bool DBManager::copy(const std::string& old_path_in, const std::string& new_path
         if (!rd.empty()) return false;
 
         txn.exec_params(
-            "INSERT INTO files (directory_id, name, data, size) "
-            "VALUES ($1, $2, $3, $4) "
+            "INSERT INTO files (directory_id, name, data, size, permissions) "
+            "VALUES ($1, $2, $3, $4, $5) "
             "ON CONFLICT (directory_id, name) DO UPDATE "
-            "SET data = EXCLUDED.data, size = EXCLUDED.size, updated_at = NOW()",
-            target_parent_id, target_name, data, size);
+            "SET data = EXCLUDED.data, size = EXCLUDED.size, permissions = EXCLUDED.permissions, updated_at = NOW()",
+            target_parent_id, target_name, data, size, permissions);
         txn.commit();
         return true;
     } catch (const std::exception& e) {
         std::cerr << "[db] copy error: " << e.what() << "\n";
         return false;
+    }
+}
+
+bool DBManager::chmod(const std::string& path_in, int permissions) {
+    std::lock_guard<std::mutex> lock(impl_->mtx);
+    try {
+        pqxx::work txn(*impl_->conn);
+        std::string path = path_util::clean_trailing(path_in);
+        if (path == "/" || path.empty()) {
+            txn.exec_params("UPDATE directories SET permissions = $1 WHERE id = 1", permissions);
+            txn.commit();
+            return true;
+        }
+        int64_t dir_id = impl_->resolve_dir(txn, path);
+        if (dir_id >= 0) {
+            txn.exec_params("UPDATE directories SET permissions = $1 WHERE id = $2", permissions, dir_id);
+            txn.commit();
+            return true;
+        }
+        std::string dir = path_util::parent(path);
+        std::string name = path_util::basename(path);
+        int64_t parent_id = impl_->resolve_dir(txn, dir);
+        if (parent_id < 0) return false;
+        auto r = txn.exec_params("UPDATE files SET permissions = $1 WHERE directory_id = $2 AND name = $3 RETURNING id", permissions, parent_id, name);
+        txn.commit();
+        return !r.empty();
+    } catch (const std::exception& e) {
+        std::cerr << "[db] chmod error: " << e.what() << "\n";
+        return false;
+    }
+}
+
+int DBManager::get_permissions(const std::string& path_in) {
+    std::lock_guard<std::mutex> lock(impl_->mtx);
+    try {
+        pqxx::work txn(*impl_->conn);
+        std::string path = path_util::clean_trailing(path_in);
+        if (path == "/" || path.empty()) {
+            auto r = txn.exec_params("SELECT COALESCE(permissions, 493) FROM directories WHERE id = 1");
+            return r.empty() ? 493 : r[0][0].as<int>();
+        }
+        int64_t dir_id = impl_->resolve_dir(txn, path);
+        if (dir_id >= 0) {
+            auto r = txn.exec_params("SELECT COALESCE(permissions, 493) FROM directories WHERE id = $1", dir_id);
+            return r.empty() ? 493 : r[0][0].as<int>();
+        }
+        std::string dir = path_util::parent(path);
+        std::string name = path_util::basename(path);
+        int64_t parent_id = impl_->resolve_dir(txn, dir);
+        if (parent_id < 0) return -1;
+        auto r = txn.exec_params("SELECT COALESCE(permissions, 420) FROM files WHERE directory_id = $1 AND name = $2", parent_id, name);
+        return r.empty() ? -1 : r[0][0].as<int>();
+    } catch (const std::exception& e) {
+        return -1;
     }
 }
 

@@ -24,6 +24,7 @@ static std::mutex sessions_mtx;
 
 #include <map>
 #include <algorithm>
+#include <functional>
 static std::map<int, std::string> active_clients;
 static std::mutex clients_mtx;
 
@@ -142,7 +143,67 @@ static bool do_handshake(int client)
     return true;
 }
 
-static std::string format_ls(const std::vector<VFSEntry>& entries)
+static bool wildcard_match(const char* pattern, const char* str)
+{
+    const char *s = str, *p = pattern;
+    const char *star = nullptr, *ss = str;
+    while (*s)
+    {
+        if (*p == *s || *p == '?')
+        {
+            p++;
+            s++;
+        }
+        else if (*p == '*')
+        {
+            star = p++;
+            ss = s;
+        }
+        else if (star)
+        {
+            p = star + 1;
+            s = ++ss;
+        }
+        else
+        {
+            return false;
+        }
+    }
+    while (*p == '*')
+        p++;
+    return *p == '\0';
+}
+
+static std::string get_basename(const std::string& path)
+{
+    if (path.empty() || path == "/") return "/";
+    auto p = path.find_last_of('/');
+    if (p == std::string::npos) return path;
+    if (p == path.size() - 1)
+    {
+        auto p2 = path.find_last_of('/', p - 1);
+        if (p2 == std::string::npos) return path.substr(0, p);
+        return path.substr(p2 + 1, p - p2 - 1);
+    }
+    return path.substr(p + 1);
+}
+
+static std::string mode_to_string(bool is_dir, int permissions)
+{
+    std::string s = is_dir ? "d" : "-";
+    s += (permissions & 0400) ? "r" : "-";
+    s += (permissions & 0200) ? "w" : "-";
+    s += (permissions & 0100) ? "x" : "-";
+    s += (permissions & 0040) ? "r" : "-";
+    s += (permissions & 0020) ? "w" : "-";
+    s += (permissions & 0010) ? "x" : "-";
+    s += (permissions & 0004) ? "r" : "-";
+    s += (permissions & 0002) ? "w" : "-";
+    s += (permissions & 0001) ? "x" : "-";
+    return s;
+}
+
+static std::string format_ls(const std::vector<VFSEntry>& entries, bool long_format = false)
 {
     if (entries.empty())
         return "(empty directory)";
@@ -150,18 +211,38 @@ static std::string format_ls(const std::vector<VFSEntry>& entries)
     std::string out;
     for (auto& e : entries)
     {
-        if (e.is_dir)
+        if (long_format)
         {
-            out += "\033[1;34m" + e.name + "/\033[0m\n";
+            std::string mode_str = mode_to_string(e.is_dir, e.permissions);
+            if (e.is_dir)
+            {
+                out += "\033[90m" + mode_str + "\033[0m  \033[1;34m" + e.name + "/\033[0m\n";
+            }
+            else
+            {
+                out += "\033[90m" + mode_str + "\033[0m  \033[37m" + e.name + "\033[0m";
+                if (e.size >= 0)
+                {
+                    out += "  \033[90m(" + std::to_string(e.size) + " bytes)\033[0m";
+                }
+                out += "\n";
+            }
         }
         else
         {
-            out += "\033[37m" + e.name;
-            if (e.size >= 0)
+            if (e.is_dir)
             {
-                out += "  \033[90m(" + std::to_string(e.size) + " bytes)\033[0m";
+                out += "\033[1;34m" + e.name + "/\033[0m\n";
             }
-            out += "\033[0m\n";
+            else
+            {
+                out += "\033[37m" + e.name;
+                if (e.size >= 0)
+                {
+                    out += "  \033[90m(" + std::to_string(e.size) + " bytes)\033[0m";
+                }
+                out += "\n";
+            }
         }
     }
     if (!out.empty() && out.back() == '\n')
@@ -193,6 +274,20 @@ static std::string route_command(const std::string& raw, const std::string& sess
     if (cmd == "ls")
     {
         std::string path = obj.count("path") ? obj["path"] : "/";
+        bool long_format = false;
+        if (obj.count("mode") && (obj["mode"] == "-l" || obj["mode"] == "-la" || obj["mode"] == "-al"))
+            long_format = true;
+        if (path == "-l" || path == "-la" || path == "-al")
+        {
+            long_format = true;
+            path = "/";
+        }
+        else if (path.find("-l ") == 0 || path.find("-la ") == 0 || path.find("-al ") == 0)
+        {
+            long_format = true;
+            auto sp = path.find(' ');
+            path = path.substr(sp + 1);
+        }
         std::string scoped = scope_path(session_id, path);
         std::cerr << "[debug] ls: path=" << path << " scoped=" << scoped << "\n";
         
@@ -207,7 +302,139 @@ static std::string route_command(const std::string& raw, const std::string& sess
         auto entries = db.list_dir(scoped);
         std::cerr << "[debug] ls: found " << entries.size() << " entries\n";
         
-        return format_ls(entries);
+        return format_ls(entries, long_format);
+    }
+
+    if (cmd == "find")
+    {
+        std::string path = obj.count("path") ? obj["path"] : "/";
+        std::string name_pat = obj.count("name") ? obj["name"] : "";
+        std::string scoped_root = scope_path(session_id, path);
+        if (!db.exists(scoped_root))
+            return "find: '" + path + "': No such file or directory";
+
+        std::vector<std::string> results;
+        std::function<void(const std::string&, const std::string&, int)> find_rec =
+            [&](const std::string& cur_scoped, const std::string& cur_display, int depth)
+        {
+            if (depth > 30) return;
+            auto entries = db.list_dir(cur_scoped);
+            for (const auto& e : entries)
+            {
+                std::string next_scoped = (cur_scoped == "/" ? "" : cur_scoped) + "/" + e.name;
+                std::string next_display = (cur_display == "/" ? "" : cur_display) + "/" + e.name;
+                if (cur_display == ".") next_display = "./" + e.name;
+                else if (cur_display == "..") next_display = "../" + e.name;
+                
+                if (name_pat.empty() || wildcard_match(name_pat.c_str(), e.name.c_str()))
+                {
+                    results.push_back(next_display);
+                }
+                if (e.is_dir)
+                {
+                    find_rec(next_scoped, next_display, depth + 1);
+                }
+            }
+        };
+
+        std::string initial_display = path;
+        if (name_pat.empty() || wildcard_match(name_pat.c_str(), get_basename(path).c_str()))
+        {
+            results.push_back(initial_display);
+        }
+        find_rec(scoped_root, initial_display, 0);
+
+        std::string out = "";
+        for (size_t i = 0; i < results.size(); i++)
+        {
+            if (i > 0) out += "\n";
+            out += results[i];
+        }
+        return out;
+    }
+
+    if (cmd == "tree")
+    {
+        std::string path = obj.count("path") ? obj["path"] : "/";
+        std::string scoped_root = scope_path(session_id, path);
+        if (!db.exists(scoped_root))
+            return "tree: '" + path + "': No such file or directory";
+
+        int dir_count = 0;
+        int file_count = 0;
+        std::string out = path == "/" ? "/" : get_basename(path);
+
+        std::function<void(const std::string&, const std::string&, int)> tree_rec =
+            [&](const std::string& cur_scoped, const std::string& prefix, int depth)
+        {
+            if (depth > 25) {
+                out += "\n" + prefix + "└── ... (max depth reached)";
+                return;
+            }
+            auto entries = db.list_dir(cur_scoped);
+            for (size_t i = 0; i < entries.size(); i++)
+            {
+                const auto& e = entries[i];
+                bool is_last = (i == entries.size() - 1);
+                out += "\n" + prefix + (is_last ? "└── " : "├── ") + e.name;
+                if (e.is_dir)
+                {
+                    dir_count++;
+                    std::string next_scoped = (cur_scoped == "/" ? "" : cur_scoped) + "/" + e.name;
+                    tree_rec(next_scoped, prefix + (is_last ? "    " : "│   "), depth + 1);
+                }
+                else
+                {
+                    file_count++;
+                }
+            }
+        };
+
+        tree_rec(scoped_root, "", 0);
+        out += "\n\n" + std::to_string(dir_count) + " director" + (dir_count == 1 ? "y" : "ies") + ", " +
+               std::to_string(file_count) + " file" + (file_count == 1 ? "" : "s");
+        return out;
+    }
+
+    if (cmd == "chmod")
+    {
+        if (!obj.count("path") || !obj.count("mode"))
+            return json::error("chmod: missing 'path' or 'mode'");
+        std::string path = obj["path"];
+        std::string mode = obj["mode"];
+        std::string scoped = scope_path(session_id, path);
+        if (!db.exists(scoped))
+            return "chmod: cannot access '" + path + "': No such file or directory";
+
+        int cur_perms = db.get_permissions(scoped);
+        if (cur_perms < 0) cur_perms = 0644;
+
+        int new_perms = cur_perms;
+        if (mode == "+x") new_perms |= 0111;
+        else if (mode == "-x") new_perms &= ~0111;
+        else if (mode == "+r") new_perms |= 0444;
+        else if (mode == "-r") new_perms &= ~0444;
+        else if (mode == "+w") new_perms |= 0222;
+        else if (mode == "-w") new_perms &= ~0222;
+        else if (mode == "u+x") new_perms |= 0100;
+        else if (mode == "u-x") new_perms &= ~0100;
+        else if (mode == "g+x") new_perms |= 0010;
+        else if (mode == "g-x") new_perms &= ~0010;
+        else if (mode == "o+x") new_perms |= 0001;
+        else if (mode == "o-x") new_perms &= ~0001;
+        else if (mode == "a+x") new_perms |= 0111;
+        else if (mode == "a-x") new_perms &= ~0111;
+        else {
+            try {
+                new_perms = std::stoi(mode, nullptr, 8);
+            } catch (...) {
+                return "chmod: invalid mode: '" + mode + "'";
+            }
+        }
+
+        if (db.chmod(scoped, new_perms))
+            return "chmod: mode of '" + path + "' changed to " + mode_to_string(false, new_perms);
+        return "chmod: failed to change permissions of '" + path + "'";
     }
 
     if (cmd == "complete")
@@ -344,6 +571,11 @@ static std::string route_command(const std::string& raw, const std::string& sess
         if (!obj.count("path"))
             return json::error("run: missing 'path'");
         std::string scoped = scope_path(session_id, obj["path"]);
+        int perms = db.get_permissions(scoped);
+        if (perms >= 0 && !(perms & 0111))
+        {
+            return "run: permission denied: '" + obj["path"] + "' is not marked executable (use `chmod +x " + obj["path"] + "`)";
+        }
         std::string content = db.read_file(scoped);
         if (content.empty())
             return "run: file not found or empty";

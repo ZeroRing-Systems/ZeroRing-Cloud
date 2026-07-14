@@ -6,6 +6,7 @@ struct VFSEntry {
     std::string name;
     bool        is_dir;
     int64_t     size;
+    int         permissions = 420; // 0644 octal = 420 decimal
 };
 
 class DBManager {
@@ -27,6 +28,8 @@ public:
     bool exists(const std::string& path);
     bool rename(const std::string& old_path, const std::string& new_path);
     bool copy(const std::string& old_path, const std::string& new_path);
+    bool chmod(const std::string& path, int permissions);
+    int get_permissions(const std::string& path);
 
     // User Management
     bool register_user(const std::string& username, const std::string& password);

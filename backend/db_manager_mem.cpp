@@ -9,9 +9,10 @@ struct VFSNode {
     std::string name;
     bool        is_dir;
     std::string data;
+    int         permissions;
     std::map<std::string, VFSNode*> children;
 
-    VFSNode(const std::string& n, bool dir) : name(n), is_dir(dir) {}
+    VFSNode(const std::string& n, bool dir) : name(n), is_dir(dir), permissions(dir ? 493 : 420) {}
 
     ~VFSNode() {
         for (auto& [k, v] : children) delete v;
@@ -108,6 +109,7 @@ std::vector<VFSEntry> DBManager::list_dir(const std::string& path) {
         e.name   = name;
         e.is_dir = child->is_dir;
         e.size   = child->is_dir ? -1 : static_cast<int64_t>(child->data.size());
+        e.permissions = child->permissions;
         entries.push_back(e);
     }
     return entries;
@@ -226,13 +228,30 @@ bool DBManager::copy(const std::string& old_path, const std::string& new_path) {
     if (dest_it != new_parent->children.end()) {
         if (dest_it->second->is_dir) return false;
         dest_it->second->data = node->data;
+        dest_it->second->permissions = node->permissions;
         return true;
     }
 
     VFSNode* copy_node = new VFSNode(new_name, false);
     copy_node->data = node->data;
+    copy_node->permissions = node->permissions;
     new_parent->children[new_name] = copy_node;
     return true;
+}
+
+bool DBManager::chmod(const std::string& path, int permissions) {
+    std::lock_guard<std::mutex> lock(impl_->mtx);
+    VFSNode* node = impl_->resolve(path);
+    if (!node) return false;
+    node->permissions = permissions;
+    return true;
+}
+
+int DBManager::get_permissions(const std::string& path) {
+    std::lock_guard<std::mutex> lock(impl_->mtx);
+    VFSNode* node = impl_->resolve(path);
+    if (!node) return -1;
+    return node->permissions;
 }
 
 bool DBManager::register_user(const std::string& username, const std::string& password) {
