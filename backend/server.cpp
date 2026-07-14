@@ -67,9 +67,11 @@ static void ensure_session_root(const std::string& session_id)
 
 static std::string scope_path(const std::string& session_id, const std::string& path)
 {
-    if (path == "/shared" || path.rfind("/shared/", 0) == 0)
+    if (path == "/public" || path.rfind("/public/", 0) == 0)
     {
-        return path; // Allow direct access to shared directory
+        // Map terminal's /public to the backend's global /shared directory
+        if (path == "/public") return "/shared";
+        return "/shared/" + path.substr(8);
     }
 
     std::string user = "";
@@ -544,9 +546,9 @@ static std::string route_command(const std::string& raw, const std::string& sess
                 db.make_dir("/shared");
             }
             if (db.write_file("/shared/" + filename, content)) {
-                return "shared " + path + " -> /shared/" + filename;
+                return "shared " + path + " -> /public/" + filename;
             }
-            return "\033[31mError:\033[0m failed to write to /shared/" + filename;
+            return "\033[31mError:\033[0m failed to write to /public/" + filename;
         }
     }
 
@@ -578,7 +580,7 @@ static std::string route_command(const std::string& raw, const std::string& sess
             return "unshare: file not found: " + filename;
             
         db.remove(shared_path);
-        return "unshared /shared/" + filename;
+        return "unshared /public/" + filename;
     }
 
     // === ZPM Install ===
@@ -594,7 +596,7 @@ static std::string route_command(const std::string& raw, const std::string& sess
         
         std::string shared_path = "/shared/" + pkg;
         if (!db.exists(shared_path))
-            return "\033[31mError:\033[0m Package '" + pkg + "' not found in global registry (/shared/).";
+            return "\033[31mError:\033[0m Package '" + pkg + "' not found in global registry (/public/).";
             
         std::string content = db.read_file(shared_path);
         
