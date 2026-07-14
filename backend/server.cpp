@@ -200,6 +200,15 @@ static std::string route_command(const std::string& raw, const std::string& sess
         std::string path = obj.count("path") ? obj["path"] : "/";
         std::string scoped = scope_path(session_id, path);
         std::cerr << "[debug] ls: path=" << path << " scoped=" << scoped << "\n";
+        
+        // Auto-create 'shared' directory so it is visible in the root
+        if (path == "/") {
+            std::string shared_dir = scoped + "/shared";
+            if (!db.exists(shared_dir)) {
+                db.make_dir(shared_dir);
+            }
+        }
+        
         auto entries = db.list_dir(scoped);
         std::cerr << "[debug] ls: found " << entries.size() << " entries\n";
         return format_ls(entries);
@@ -500,8 +509,11 @@ static std::string route_command(const std::string& raw, const std::string& sess
         if (!target_user.empty())
         {
             // Private share
-            std::string dest_dir = "/users/" + target_user + "/";
-            std::string dest_path = dest_dir + filename;
+            std::string dest_dir = "/users/" + target_user + "/shared";
+            if (!db.exists(dest_dir)) {
+                db.make_dir(dest_dir);
+            }
+            std::string dest_path = dest_dir + "/" + filename;
             
             db.write_file(dest_path, content);
             
