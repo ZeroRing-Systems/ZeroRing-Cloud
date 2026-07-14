@@ -3,30 +3,41 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ZeroRing OS</title>
+    <title>ZeroRing OS — WebAssembly-Powered Cloud Kernel & Terminal</title>
+    <meta name="description" content="ZeroRing OS is a modern, full-stack WebAssembly micro-kernel operating system running natively in your browser with real-time multi-user synchronization, persistent VFS, and instant execution." />
+    <meta name="keywords" content="ZeroRing, WebAssembly, OS, Terminal, C++, WASM, Cloud Operating System, Virtual Filesystem, Bash, Sandbox" />
+    <meta property="og:title" content="ZeroRing OS — WebAssembly-Powered Cloud Kernel" />
+    <meta property="og:description" content="Experience a full-stack, WebAssembly-powered micro-kernel OS that runs natively in your browser with zero-dependency C++ backends." />
+    <meta property="og:type" content="website" />
+    
     <!-- Vercel Analytics -->
     <script>
       window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
     </script>
     <script defer src="/_vercel/insights/script.js"></script>
     <!-- End Vercel Analytics -->
+    
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap"
-      rel="stylesheet"
-    />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
     <style>
       :root {
         --bg: #050508;
-        --surface: rgba(20, 20, 25, 0.6);
+        --surface: rgba(20, 20, 28, 0.65);
+        --surface-hover: rgba(30, 30, 42, 0.8);
         --primary: #6366f1;
         --primary-hover: #818cf8;
+        --accent: #c084fc;
         --text: #f8fafc;
         --text-dim: #94a3b8;
         --border: rgba(255, 255, 255, 0.08);
-        --glow: rgba(99, 102, 241, 0.15);
+        --border-highlight: rgba(99, 102, 241, 0.35);
+        --glow: rgba(99, 102, 241, 0.2);
+      }
+
+      * {
+        box-sizing: border-box;
       }
 
       body {
@@ -37,72 +48,72 @@
         color: var(--text);
         line-height: 1.6;
         overflow-x: hidden;
+        min-height: 100vh;
         display: flex;
         flex-direction: column;
-        min-height: 100vh;
       }
 
       /* Animated Background Glows */
       .bg-glow {
         position: absolute;
         border-radius: 50%;
-        filter: blur(120px);
-        z-index: -1;
-        opacity: 0.5;
-        animation: float 20s ease-in-out infinite alternate;
+        filter: blur(140px);
+        z-index: 0;
+        pointer-events: none;
+        opacity: 0.45;
+        animation: float 22s ease-in-out infinite alternate;
       }
       .glow-1 {
         top: -10%;
-        left: -10%;
-        width: 500px;
-        height: 500px;
-        background: rgba(99, 102, 241, 0.4);
+        left: 5%;
+        width: 550px;
+        height: 550px;
+        background: radial-gradient(circle, rgba(99, 102, 241, 0.6) 0%, transparent 70%);
       }
       .glow-2 {
-        bottom: 10%;
-        right: -10%;
-        width: 600px;
-        height: 600px;
-        background: rgba(168, 85, 247, 0.3);
-        animation-delay: -10s;
+        top: 35%;
+        right: -5%;
+        width: 650px;
+        height: 650px;
+        background: radial-gradient(circle, rgba(192, 132, 252, 0.45) 0%, transparent 70%);
+        animation-delay: -11s;
       }
       .glow-3 {
-        top: 40%;
-        left: 50%;
-        width: 400px;
-        height: 400px;
-        background: rgba(56, 189, 248, 0.2);
-        transform: translate(-50%, -50%);
+        bottom: 5%;
+        left: 20%;
+        width: 500px;
+        height: 500px;
+        background: radial-gradient(circle, rgba(56, 189, 248, 0.35) 0%, transparent 70%);
+        animation-delay: -5s;
       }
 
       @keyframes float {
-        0% {
-          transform: translate(0, 0);
-        }
-        100% {
-          transform: translate(50px, 50px);
-        }
+        0% { transform: translate(0, 0) scale(1); }
+        50% { transform: translate(40px, -30px) scale(1.08); }
+        100% { transform: translate(-30px, 40px) scale(0.95); }
       }
 
       .container {
-        max-width: 1200px;
+        max-width: 1240px;
         margin: 0 auto;
         padding: 0 2rem;
         width: 100%;
-        box-sizing: border-box;
-        z-index: 1;
+        position: relative;
+        z-index: 10;
       }
 
+      /* Header */
       header {
-        padding: 2rem 0;
+        padding: 1.5rem 0;
         display: flex;
         justify-content: space-between;
         align-items: center;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
       }
 
       .logo {
         font-weight: 800;
-        font-size: 1.5rem;
+        font-size: 1.6rem;
         letter-spacing: -0.5px;
         display: flex;
         align-items: center;
@@ -112,106 +123,376 @@
       }
 
       .logo-icon {
-        width: 36px;
-        height: 36px;
+        width: 38px;
+        height: 38px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        filter: drop-shadow(0 0 15px rgba(168, 85, 247, 0.4));
+        filter: drop-shadow(0 0 16px rgba(168, 85, 247, 0.5));
       }
 
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 2rem;
+      }
+
+      .nav-link {
+        color: var(--text-dim);
+        text-decoration: none;
+        font-weight: 500;
+        font-size: 0.95rem;
+        transition: color 0.2s;
+      }
+      .nav-link:hover { color: #fff; }
+
+      .nav-cta {
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid var(--border);
+        color: #fff;
+        padding: 0.6rem 1.25rem;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 0.9rem;
+        text-decoration: none;
+        transition: all 0.2s;
+      }
+      .nav-cta:hover {
+        background: var(--primary);
+        border-color: var(--primary-hover);
+        box-shadow: 0 0 20px var(--glow);
+      }
+
+      /* Hero Section */
       .hero {
-        padding: 6rem 0 4rem;
+        padding: 6rem 0 3rem;
         text-align: center;
         display: flex;
         flex-direction: column;
         align-items: center;
       }
 
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: rgba(99, 102, 241, 0.12);
+        border: 1px solid rgba(99, 102, 241, 0.3);
+        color: var(--primary-hover);
+        padding: 0.4rem 1.1rem;
+        border-radius: 50px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        margin-bottom: 2rem;
+      }
+      .badge-dot {
+        width: 6px;
+        height: 6px;
+        background: #10b981;
+        border-radius: 50%;
+        box-shadow: 0 0 8px #10b981;
+        animation: pulse 2s infinite;
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.4; transform: scale(0.85); }
+      }
+
       h1 {
-        font-size: 5rem;
+        font-size: 5.2rem;
         font-weight: 800;
-        line-height: 1.1;
+        line-height: 1.08;
         margin: 0 0 1.5rem 0;
-        letter-spacing: -2px;
+        letter-spacing: -2.5px;
       }
 
       .gradient-text {
-        background: linear-gradient(to right, #fff, #a5b4fc, #c084fc);
+        background: linear-gradient(135deg, #fff 0%, #a5b4fc 50%, #f472b6 100%);
         -webkit-background-clip: text;
         background-clip: text;
         -webkit-text-fill-color: transparent;
       }
 
       .subtitle {
-        font-size: 1.25rem;
+        font-size: 1.3rem;
         color: var(--text-dim);
-        max-width: 650px;
-        margin: 0 0 3rem 0;
+        max-width: 680px;
+        margin: 0 0 2.5rem 0;
         font-weight: 300;
       }
 
-      .btn {
+      .cta-group {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+        justify-content: center;
+        margin-bottom: 4.5rem;
+      }
+
+      .btn-primary {
         display: inline-flex;
         align-items: center;
         gap: 0.75rem;
         background: linear-gradient(135deg, var(--primary), #4f46e5);
         color: white;
-        padding: 1.2rem 2.5rem;
+        padding: 1.1rem 2.6rem;
         border-radius: 12px;
         text-decoration: none;
         font-weight: 600;
-        font-size: 1.125rem;
+        font-size: 1.1rem;
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        box-shadow: 0 10px 30px var(--glow);
-        text-transform: uppercase;
-        letter-spacing: 1px;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        box-shadow: 0 12px 35px var(--glow);
+        letter-spacing: 0.5px;
       }
-
-      .btn:hover {
+      .btn-primary:hover {
         transform: translateY(-3px) scale(1.02);
-        box-shadow: 0 20px 40px rgba(99, 102, 241, 0.4);
+        box-shadow: 0 20px 45px rgba(99, 102, 241, 0.45);
         background: linear-gradient(135deg, var(--primary-hover), #6366f1);
       }
 
-      .features {
+      .btn-secondary {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem;
+        background: rgba(255, 255, 255, 0.04);
+        color: #fff;
+        padding: 1.1rem 2.2rem;
+        border-radius: 12px;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 1.1rem;
+        transition: all 0.3s;
+        border: 1px solid var(--border);
+      }
+      .btn-secondary:hover {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.2);
+        transform: translateY(-2px);
+      }
+
+      /* Interactive Demo Section */
+      .demo-section {
+        width: 100%;
+        max-width: 900px;
+        margin: 0 auto 6rem;
+      }
+
+      .demo-header-text {
+        text-align: center;
+        margin-bottom: 1.5rem;
+      }
+      .demo-header-text h2 {
+        font-size: 1.8rem;
+        margin: 0 0 0.5rem 0;
+        font-weight: 700;
+      }
+      .demo-header-text p {
+        color: var(--text-dim);
+        margin: 0;
+        font-size: 0.95rem;
+      }
+
+      .demo-chips {
+        display: flex;
+        gap: 0.6rem;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin-bottom: 1rem;
+      }
+      .chip {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #e2e8f0;
+        padding: 0.4rem 0.9rem;
+        border-radius: 6px;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 0.82rem;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .chip:hover {
+        background: rgba(99, 102, 241, 0.2);
+        border-color: var(--primary);
+        color: #fff;
+        transform: translateY(-1px);
+      }
+
+      .terminal-mockup {
+        background: rgba(12, 12, 18, 0.85);
+        backdrop-filter: blur(40px);
+        -webkit-backdrop-filter: blur(40px);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 30px 80px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        text-align: left;
+      }
+
+      .terminal-header {
+        background: rgba(255, 255, 255, 0.04);
+        padding: 0.8rem 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      .window-controls {
+        display: flex;
+        gap: 8px;
+      }
+      .control-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+      }
+      .dot-red { background: #ff5f56; }
+      .dot-yellow { background: #ffbd2e; }
+      .dot-green { background: #27c93f; }
+
+      .terminal-title {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 0.8rem;
+        color: #64748b;
+        font-weight: 600;
+      }
+
+      .terminal-status {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.75rem;
+        color: #10b981;
+        font-family: "JetBrains Mono", monospace;
+      }
+
+      .terminal-body {
+        padding: 1.75rem;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 0.92rem;
+        color: #e2e8f0;
+        line-height: 1.7;
+        max-height: 380px;
+        overflow-y: auto;
+      }
+      .terminal-body::-webkit-scrollbar { width: 6px; }
+      .terminal-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+      .t-line { margin-bottom: 0.4rem; white-space: pre-wrap; }
+      .t-user { color: #a5b4fc; font-weight: 700; }
+      .t-colon { color: #64748b; }
+      .t-path { color: #6ee7b7; font-weight: 700; }
+      .t-dollar { color: #cbd5e1; }
+      .t-cmd { color: #fff; font-weight: 600; margin-left: 6px; }
+      .t-out { color: #94a3b8; padding-left: 0.5rem; margin-top: 2px; }
+      .t-out.highlight { color: #fbcfe8; }
+      .t-out.success { color: #34d399; }
+      .t-out.info { color: #38bdf8; }
+
+      .demo-input-line {
+        display: flex;
+        align-items: center;
+        margin-top: 0.5rem;
+      }
+      .demo-input {
+        background: transparent;
+        border: none;
+        color: #fff;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 0.92rem;
+        font-weight: 600;
+        margin-left: 6px;
+        flex: 1;
+        outline: none;
+      }
+
+      /* Features Grid */
+      .features-section {
+        padding: 4rem 0 6rem;
+      }
+
+      .section-header {
+        text-align: center;
+        margin-bottom: 4rem;
+      }
+      .section-header h2 {
+        font-size: 2.8rem;
+        font-weight: 800;
+        margin: 0 0 1rem 0;
+        letter-spacing: -1px;
+      }
+      .section-header p {
+        color: var(--text-dim);
+        font-size: 1.15rem;
+        max-width: 600px;
+        margin: 0 auto;
+      }
+
+      .features-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
         gap: 2rem;
-        padding: 2rem 0 6rem;
       }
 
       .feature-card {
         background: var(--surface);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
+        backdrop-filter: blur(25px);
+        -webkit-backdrop-filter: blur(25px);
         border: 1px solid var(--border);
         border-radius: 20px;
         padding: 2.5rem;
-        transition: all 0.3s;
-        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+        transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .feature-card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: linear-gradient(90deg, transparent, var(--primary), transparent);
+        opacity: 0;
+        transition: opacity 0.35s;
       }
 
       .feature-card:hover {
         transform: translateY(-8px);
-        border-color: rgba(168, 85, 247, 0.5);
-        box-shadow: 0 20px 40px rgba(168, 85, 247, 0.15);
+        border-color: var(--border-highlight);
+        background: var(--surface-hover);
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4), 0 0 30px rgba(99, 102, 241, 0.15);
+      }
+      .feature-card:hover::before {
+        opacity: 1;
       }
 
-      .feature-icon {
-        font-size: 2.5rem;
+      .feature-icon-wrapper {
+        width: 54px;
+        height: 54px;
+        border-radius: 14px;
+        background: rgba(99, 102, 241, 0.12);
+        border: 1px solid rgba(99, 102, 241, 0.25);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.6rem;
         margin-bottom: 1.5rem;
-        background: linear-gradient(135deg, #a5b4fc, #fbcfe8);
-        -webkit-background-clip: text;
-        background-clip: text;
-        -webkit-text-fill-color: transparent;
-        display: inline-block;
+        transition: transform 0.3s;
+      }
+      .feature-card:hover .feature-icon-wrapper {
+        transform: scale(1.1) rotate(5deg);
+        background: rgba(99, 102, 241, 0.2);
       }
 
       .feature-title {
-        font-size: 1.4rem;
-        font-weight: 600;
+        font-size: 1.35rem;
+        font-weight: 700;
         margin: 0 0 0.75rem 0;
         color: #fff;
       }
@@ -219,110 +500,52 @@
       .feature-desc {
         color: var(--text-dim);
         margin: 0;
-        font-size: 1rem;
-        font-weight: 300;
+        font-size: 0.98rem;
+        line-height: 1.65;
+        font-weight: 400;
       }
 
-      /* Mockup Window */
-      .window {
-        background: rgba(10, 10, 15, 0.8);
-        backdrop-filter: blur(40px);
-        -webkit-backdrop-filter: blur(40px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 16px;
-        overflow: hidden;
-        width: 100%;
-        max-width: 850px;
-        margin: 0 auto 5rem;
-        box-shadow:
-          0 30px 80px rgba(0, 0, 0, 0.6),
-          inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      /* Architecture Banner */
+      .arch-banner {
+        background: linear-gradient(135deg, rgba(20, 20, 32, 0.8), rgba(30, 24, 48, 0.8));
+        border: 1px solid var(--border-highlight);
+        border-radius: 24px;
+        padding: 3.5rem;
+        margin: 2rem 0 6rem;
+        text-align: center;
         position: relative;
+        overflow: hidden;
       }
-
-      .window::before {
-        content: "";
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 1px;
-        background: linear-gradient(
-          90deg,
-          transparent,
-          rgba(255, 255, 255, 0.2),
-          transparent
-        );
+      .arch-banner h3 {
+        font-size: 2.2rem;
+        margin: 0 0 1rem 0;
+        font-weight: 800;
       }
-
-      .window-header {
-        background: rgba(255, 255, 255, 0.03);
-        padding: 1rem 1.25rem;
-        display: flex;
-        gap: 0.5rem;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-      }
-
-      .back-btn {
+      .arch-banner p {
         color: var(--text-dim);
-        transition: 0.2s;
-        display: flex;
-        align-items: center;
-      }
-      .back-btn:hover {
-        color: #fff;
+        max-width: 700px;
+        margin: 0 auto 2.5rem;
+        font-size: 1.1rem;
       }
 
-      .window-content {
-        padding: 2.5rem;
-        font-family: "JetBrains Mono", monospace;
-        color: #fff;
-        text-align: left;
-        font-size: 0.95rem;
-        line-height: 1.7;
+      /* Footer */
+      footer {
+        padding: 3rem 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        text-align: center;
+        color: var(--text-dim);
+        font-size: 0.9rem;
       }
 
-      .p-user {
-        color: #a5b4fc;
-        font-weight: bold;
-      }
-      .p-colon {
-        color: #64748b;
-      }
-      .p-path {
-        color: #6ee7b7;
-        font-weight: bold;
-      }
-      .p-dollar {
-        color: #cbd5e1;
-      }
-
-      .command {
-        color: #f8fafc;
-        margin-left: 8px;
-      }
-      .output {
-        color: #94a3b8;
-        display: block;
-        padding-left: 0;
-        margin-top: 4px;
-        margin-bottom: 1.5rem;
-      }
-      .output-highlight {
-        color: #fbcfe8;
-      }
-
+      /* Responsive */
       @media (max-width: 768px) {
-        h1 {
-          font-size: 3rem;
-        }
-        .hero {
-          padding: 4rem 0 2rem;
-        }
-        .window-content {
-          padding: 1.5rem;
-          font-size: 0.85rem;
-        }
+        h1 { font-size: 3.2rem; letter-spacing: -1.5px; }
+        .hero { padding: 4rem 0 2rem; }
+        .subtitle { font-size: 1.1rem; }
+        .btn-primary, .btn-secondary { width: 100%; justify-content: center; }
+        .terminal-body { padding: 1.2rem; font-size: 0.82rem; }
+        .features-grid { grid-template-columns: 1fr; }
+        .arch-banner { padding: 2rem 1.5rem; }
       }
     </style>
   </head>
@@ -335,181 +558,266 @@
       <header>
         <a href="#" class="logo">
           <div class="logo-icon">
-            <svg
-              viewBox="0 0 40 40"
-              xmlns="http://www.w3.org/2000/svg"
-              width="36"
-              height="36"
-            >
+            <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" width="36" height="36">
               <defs>
                 <linearGradient id="logo-g" x1="0%" y1="0%" x2="100%" y2="100%">
                   <stop offset="0%" stop-color="#818cf8" />
                   <stop offset="100%" stop-color="#c084fc" />
                 </linearGradient>
               </defs>
-              <circle
-                cx="20"
-                cy="20"
-                r="14"
-                fill="none"
-                stroke="url(#logo-g)"
-                stroke-width="8"
-              />
+              <circle cx="20" cy="20" r="14" fill="none" stroke="url(#logo-g)" stroke-width="8" />
             </svg>
           </div>
-          ZeroRing
+          ZeroRing OS
         </a>
-        <a
-          href="https://github.com/ZeroRing-Systems"
-          target="_blank"
-          style="
-            color: var(--text-dim);
-            text-decoration: none;
-            font-weight: 600;
-            transition: color 0.2s;
-          "
-          onmouseover="this.style.color = '#fff'"
-          onmouseout="this.style.color = 'var(--text-dim)'"
-          >GitHub</a
-        >
+        <nav class="nav-links">
+          <a href="https://github.com/ZeroRing-Systems" target="_blank" class="nav-link">GitHub</a>
+          <a href="terminal.html" class="nav-cta">Launch Shell →</a>
+        </nav>
       </header>
 
-      <main class="hero">
-        <h1>
-          The Operating System<br /><span class="gradient-text"
-            >for the Web</span
-          >
-        </h1>
-        <p class="subtitle">
-          A full-stack, WebAssembly-powered micro-kernel OS that runs natively
-          in your browser. Persistent storage, zero-dependency C++ backend, and
-          a beautiful unified shell.
-        </p>
+      <main>
+        <section class="hero">
+          <div class="badge">
+            <span class="badge-dot"></span> WebAssembly Micro-Kernel v2.0 Live
+          </div>
+          <h1>
+            The Operating System<br />
+            <span class="gradient-text">for the Modern Web</span>
+          </h1>
+          <p class="subtitle">
+            A real-time, sandboxed C++ micro-kernel compiled directly to WebAssembly. Featuring multi-user persistent storage, WebSocket virtual networking, and collaborative instant execution right in your browser.
+          </p>
 
-        <div class="window">
-          <div class="window-header">
-            <div class="back-btn">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="m15 18-6-6 6-6" />
+          <div class="cta-group">
+            <a href="terminal.html" class="btn-primary">
+              Try It Now — Launch Shell
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+                <polyline points="12 5 19 12 12 19"></polyline>
               </svg>
+            </a>
+            <a href="#demo" class="btn-secondary">Test Interactive Demo ↓</a>
+          </div>
+        </section>
+
+        <!-- Interactive Demo Terminal -->
+        <section id="demo" class="demo-section">
+          <div class="demo-header-text">
+            <h2>Interactive Live Preview</h2>
+            <p>Click any quick command chip or type directly below to interact with our simulated VFS.</p>
+          </div>
+          <div class="demo-chips">
+            <button class="chip" onclick="runDemoCommand('help')">help</button>
+            <button class="chip" onclick="runDemoCommand('whoami')">whoami</button>
+            <button class="chip" onclick="runDemoCommand('ls')">ls</button>
+            <button class="chip" onclick="runDemoCommand('uname -a')">uname -a</button>
+            <button class="chip" onclick="runDemoCommand('zpm list')">zpm list</button>
+            <button class="chip" onclick="runDemoCommand('echo ZeroRing is fast!')">echo</button>
+            <button class="chip" onclick="runDemoCommand('clear')">clear</button>
+          </div>
+
+          <div class="terminal-mockup" onclick="focusDemoInput()">
+            <div class="terminal-header">
+              <div class="window-controls">
+                <div class="control-dot dot-red"></div>
+                <div class="control-dot dot-yellow"></div>
+                <div class="control-dot dot-green"></div>
+              </div>
+              <div class="terminal-title">guest@zeroring: ~ (interactive preview)</div>
+              <div class="terminal-status">● ONLINE</div>
+            </div>
+            <div class="terminal-body" id="demo-output">
+              <div class="t-line"><span class="t-out info">Welcome to ZeroRing Preview Shell v2.0. Type commands below or click quick chips!</span></div>
+              <div class="t-line">
+                <span class="t-user">guest</span><span class="t-colon">:</span><span class="t-path">/</span><span class="t-dollar">$</span><span class="t-cmd">whoami</span>
+              </div>
+              <div class="t-line"><span class="t-out">anonymous_guest (sandbox: ready)</span></div>
+              <div class="t-line">
+                <span class="t-user">guest</span><span class="t-colon">:</span><span class="t-path">/</span><span class="t-dollar">$</span><span class="t-cmd">ls</span>
+              </div>
+              <div class="t-line"><span class="t-out">readme.txt   kernel.wasm   script.py   game.js</span></div>
+            </div>
+            <div class="terminal-body" style="padding-top: 0; padding-bottom: 1.25rem;">
+              <form class="demo-input-line" onsubmit="handleDemoSubmit(event)">
+                <span class="t-user">guest</span><span class="t-colon">:</span><span class="t-path">/</span><span class="t-dollar">$</span>
+                <input type="text" id="demo-input" class="demo-input" placeholder="Type a command (e.g. help, ls, whoami)..." autocomplete="off" spellcheck="false" />
+              </form>
             </div>
           </div>
-          <div class="window-content">
-            <div>
-              <span class="p-user">zeroring</span><span class="p-colon">:</span
-              ><span class="p-path">/</span><span class="p-dollar">$</span>
-              <span class="command">whoami</span>
-            </div>
-            <div class="output">
-              anonymous (session: 8f032115291bebf5d5e57385b53113f1)
+        </section>
+
+        <!-- Features Section -->
+        <section class="features-section">
+          <div class="section-header">
+            <h2>Engineered for Performance & Security</h2>
+            <p>Every sub-component is crafted to deliver instantaneous execution and true OS-level isolation inside standard web browsers.</p>
+          </div>
+
+          <div class="features-grid">
+            <div class="feature-card">
+              <div class="feature-icon-wrapper">⚡️</div>
+              <h3 class="feature-title">Native WASM Kernel</h3>
+              <p class="feature-desc">
+                Our custom C++ micro-kernel is compiled directly to WebAssembly (`kernel.wasm`), executing commands at near-native speed with zero external JavaScript dependencies.
+              </p>
             </div>
 
-            <div>
-              <span class="p-user">zeroring</span><span class="p-colon">:</span
-              ><span class="p-path">/</span><span class="p-dollar">$</span>
-              <span class="command"
-                >write game.py "print('Hello ZeroRing!')"</span
-              >
+            <div class="feature-card">
+              <div class="feature-icon-wrapper">💾</div>
+              <h3 class="feature-title">Persistent PostgreSQL VFS</h3>
+              <p class="feature-desc">
+                Every file created, script modified, or directory structured is backed in real-time by a robust PostgreSQL virtual filesystem. Your workspaces stay perfectly synced across sessions.
+              </p>
             </div>
-            <div class="output">saved: game.py (23 bytes)</div>
 
-            <div>
-              <span class="p-user">zeroring</span><span class="p-colon">:</span
-              ><span class="p-path">/</span><span class="p-dollar">$</span>
-              <span class="command">run game.py</span>
+            <div class="feature-card">
+              <div class="feature-icon-wrapper">🔒</div>
+              <h3 class="feature-title">Airtight User Isolation</h3>
+              <p class="feature-desc">
+                Registering and logging in automatically scopes your entire session root to `/users/<username>`. Ephemeral anonymous sessions are completely decoupled and wiped clean on transition.
+              </p>
             </div>
-            <div class="output output-highlight">Hello ZeroRing!</div>
 
-            <div>
-              <span class="p-user">zeroring</span><span class="p-colon">:</span
-              ><span class="p-path">/</span><span class="p-dollar">$</span>
-              <span
-                class="command _"
-                style="animation: blink 1s step-end infinite"
-                >_</span
-              >
+            <div class="feature-card">
+              <div class="feature-icon-wrapper">📦</div>
+              <h3 class="feature-title">ZeroRing Package Manager (ZPM)</h3>
+              <p class="feature-desc">
+                Publish utilities globally using `zpm publish`, inspect shared software with `zpm list`, and pull community scripts straight into your local workspace with `zpm install`.
+              </p>
+            </div>
+
+            <div class="feature-card">
+              <div class="feature-icon-wrapper">💬</div>
+              <h3 class="feature-title">Real-time DMs & Collaboration</h3>
+              <p class="feature-desc">
+                Share files privately to user inboxes using `share @username file.py` or communicate instantly across active terminal sessions using built-in real-time WebSocket chat.
+              </p>
+            </div>
+
+            <div class="feature-card">
+              <div class="feature-icon-wrapper">📱</div>
+              <h3 class="feature-title">Touch & Mobile Optimized</h3>
+              <p class="feature-desc">
+                Seamlessly code on the go with responsive virtual touch toolbars providing instant access to arrow keys, Tab auto-completion, pipe operators, and Ctrl operators.
+              </p>
             </div>
           </div>
-        </div>
+        </section>
 
-        <a href="terminal.html" class="btn">
-          Launch Terminal
-          <svg
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-            <polyline points="12 5 19 12 12 19"></polyline>
-          </svg>
-        </a>
+        <!-- Architecture Banner -->
+        <section class="arch-banner">
+          <h3>Ready to dive into your cloud terminal?</h3>
+          <p>Instant startup. No Docker setup, no local installation, and zero configuration required. Jump right into your persistent guest workspace.</p>
+          <a href="terminal.html" class="btn-primary">
+            Launch ZeroRing Shell Now
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+              <polyline points="12 5 19 12 12 19"></polyline>
+            </svg>
+          </a>
+        </section>
       </main>
 
-      <div class="features">
-        <div class="feature-card">
-          <div class="feature-icon">⚡️</div>
-          <h3 class="feature-title">Native WASM Kernel</h3>
-          <p class="feature-desc">
-            A custom C++ kernel compiled directly to WebAssembly for screaming
-            fast execution directly in your browser.
-          </p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">💾</div>
-          <h3 class="feature-title">Persistent Database</h3>
-          <p class="feature-desc">
-            Multi-user persistent storage backed by PostgreSQL. Your sessions,
-            files, and shares are saved forever.
-          </p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🌐</div>
-          <h3 class="feature-title">WebSockets & API</h3>
-          <p class="feature-desc">
-            Zero-dependency concurrent C++ backend proxying real-time kernel
-            operations with ultra-low latency.
-          </p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🔒</div>
-          <h3 class="feature-title">Sandboxed Execution</h3>
-          <p class="feature-desc">
-            Run Python, Node.js, and Bash scripts directly from your terminal in
-            a secure, resource-limited server sandbox.
-          </p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🤝</div>
-          <h3 class="feature-title">Global Sharing</h3>
-          <p class="feature-desc">
-            Share files, read community scripts, and build together in a unified
-            public virtual filesystem.
-          </p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">✨</div>
-          <h3 class="feature-title">Modern Interface</h3>
-          <p class="feature-desc">
-            A beautiful, hardware-accelerated terminal interface with
-            drag-and-drop uploads, GUI editor, and colors.
-          </p>
-        </div>
-      </div>
+      <footer>
+        <p>© 2026 ZeroRing Systems. Built with C++, WebAssembly, PostgreSQL & WebSockets.</p>
+      </footer>
     </div>
+
+    <script>
+      const demoOutput = document.getElementById('demo-output');
+      const demoInput = document.getElementById('demo-input');
+
+      function focusDemoInput() {
+        if (demoInput) demoInput.focus();
+      }
+
+      function appendDemoLine(cmd, outputText, outputClass = '') {
+        if (cmd === 'clear') {
+          demoOutput.innerHTML = '';
+          return;
+        }
+
+        const cmdLine = document.createElement('div');
+        cmdLine.className = 't-line';
+        cmdLine.innerHTML = `<span class="t-user">guest</span><span class="t-colon">:</span><span class="t-path">/</span><span class="t-dollar">$</span><span class="t-cmd">${cmd}</span>`;
+        demoOutput.appendChild(cmdLine);
+
+        if (outputText !== null) {
+          const outLine = document.createElement('div');
+          outLine.className = `t-line`;
+          outLine.innerHTML = `<span class="t-out ${outputClass}">${outputText}</span>`;
+          demoOutput.appendChild(outLine);
+        }
+
+        demoOutput.scrollTop = demoOutput.scrollHeight;
+      }
+
+      function runDemoCommand(cmdStr) {
+        demoInput.value = '';
+        processDemoCmd(cmdStr);
+      }
+
+      function handleDemoSubmit(event) {
+        event.preventDefault();
+        const val = demoInput.value.trim();
+        if (!val) return;
+        demoInput.value = '';
+        processDemoCmd(val);
+      }
+
+      function processDemoCmd(rawCmd) {
+        const parts = rawCmd.trim().split(/\s+/);
+        const main = parts[0].toLowerCase();
+        const args = parts.slice(1).join(' ');
+
+        if (main === 'clear') {
+          demoOutput.innerHTML = '';
+          return;
+        }
+        if (main === 'help') {
+          appendDemoLine(rawCmd, `ZeroRing OS Commands:\n  help      - Display available system commands\n  whoami    - Show current active session user\n  ls        - List virtual directory contents\n  echo <t>  - Print string to stdout\n  uname -a  - Display kernel architectural details\n  zpm list  - View global package registry\n  clear     - Clear shell buffer\n\nTo run full interactive scripts and C++ utilities, launch the full terminal above!`, 'info');
+          return;
+        }
+        if (main === 'whoami') {
+          appendDemoLine(rawCmd, 'anonymous_guest (sandbox: ready)', 'success');
+          return;
+        }
+        if (main === 'ls') {
+          appendDemoLine(rawCmd, 'readme.txt   kernel.wasm   script.py   game.js   zpm.json');
+          return;
+        }
+        if (main === 'uname' || rawCmd.startsWith('uname')) {
+          appendDemoLine(rawCmd, 'ZeroRing-Kernel 2.0.0-wasm32 #1 SMP Wed Jul 14 2026 WebAssembly/vfs-pg', 'highlight');
+          return;
+        }
+        if (main === 'zpm') {
+          if (args === 'list') {
+            appendDemoLine(rawCmd, 'Global Package Registry:\n  [pkg] utils.py (shared by @alice)\n  [pkg] matrix.js (shared by @root)\n  [pkg] benchmark.sh (shared by @dev)\n\nUse "zpm install <pkg>" in full shell to download.', 'info');
+          } else {
+            appendDemoLine(rawCmd, 'Usage: zpm list | zpm publish <file> | zpm install <pkg>');
+          }
+          return;
+        }
+        if (main === 'echo') {
+          appendDemoLine(rawCmd, args || '', 'highlight');
+          return;
+        }
+        if (main === 'cat') {
+          if (args === 'readme.txt') {
+            appendDemoLine(rawCmd, 'ZeroRing OS — WebAssembly Micro-Kernel\nWelcome to our persistent virtual filesystem inside your browser.');
+          } else {
+            appendDemoLine(rawCmd, `cat: ${args || 'missing path'}: No such file or directory`);
+          }
+          return;
+        }
+        if (main === 'login' || main === 'register' || main === 'share' || main === 'write' || main === 'run') {
+          appendDemoLine(rawCmd, `Command "${main}" requires full WebSocket backend connection.\nClick "Try It Now — Launch Shell" above to open the full interactive terminal!`, 'highlight');
+          return;
+        }
+
+        appendDemoLine(rawCmd, `bash: command not found: ${main}. Type "help" for interactive preview options.`);
+      }
+    </script>
   </body>
 </html>
