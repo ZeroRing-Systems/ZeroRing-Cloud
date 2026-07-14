@@ -67,13 +67,6 @@ static void ensure_session_root(const std::string& session_id)
 
 static std::string scope_path(const std::string& session_id, const std::string& path)
 {
-    if (path == "/public" || path.rfind("/public/", 0) == 0)
-    {
-        // Map terminal's /public to the backend's global /shared directory
-        if (path == "/public") return "/shared";
-        return "/shared/" + path.substr(8);
-    }
-
     std::string user = "";
     {
         std::lock_guard<std::mutex> lock(sessions_mtx);
@@ -214,16 +207,6 @@ static std::string route_command(const std::string& raw, const std::string& sess
         auto entries = db.list_dir(scoped);
         std::cerr << "[debug] ls: found " << entries.size() << " entries\n";
         
-        if (path == "/") {
-            bool has_public = false;
-            for (auto& e : entries) {
-                if (e.name == "public") has_public = true;
-            }
-            if (!has_public) {
-                entries.push_back({"public", true, -1});
-            }
-        }
-        
         return format_ls(entries);
     }
 
@@ -260,26 +243,10 @@ static std::string route_command(const std::string& raw, const std::string& sess
         return "__stat__file";
     }
 
-    auto check_public_write = [&](const std::string& p) -> bool {
-        if (p == "/public" || p.rfind("/public/", 0) == 0) {
-            std::string username = "";
-            {
-                std::lock_guard<std::mutex> lock(sessions_mtx);
-                auto it = session_to_user.find(session_id);
-                if (it != session_to_user.end())
-                    username = it->second;
-            }
-            return username == "root";
-        }
-        return true;
-    };
-
     if (cmd == "mkdir")
     {
         if (!obj.count("path"))
             return json::error("mkdir: missing 'path'");
-        if (!check_public_write(obj["path"]))
-            return "\033[31mError:\033[0m Permission denied for /public.";
         std::string scoped = scope_path(session_id, obj["path"]);
         std::cerr << "[debug] mkdir: path=" << obj["path"] << " scoped=" << scoped << "\n";
         if (db.make_dir(scoped))
@@ -293,8 +260,6 @@ static std::string route_command(const std::string& raw, const std::string& sess
     {
         if (!obj.count("path"))
             return json::error("touch: missing 'path'");
-        if (!check_public_write(obj["path"]))
-            return "\033[31mError:\033[0m Permission denied for /public.";
         std::string scoped = scope_path(session_id, obj["path"]);
         if (!db.exists(scoped))
         {
@@ -321,8 +286,6 @@ static std::string route_command(const std::string& raw, const std::string& sess
     {
         if (!obj.count("path"))
             return json::error("save: missing 'path'");
-        if (!check_public_write(obj["path"]))
-            return "\033[31mError:\033[0m Permission denied for /public.";
         std::string data = obj.count("data") ? obj["data"] : "";
         if (db.write_file(scope_path(session_id, obj["path"]), data))
         {
@@ -335,8 +298,6 @@ static std::string route_command(const std::string& raw, const std::string& sess
     {
         if (!obj.count("path"))
             return json::error("rm: missing 'path'");
-        if (!check_public_write(obj["path"]))
-            return "\033[31mError:\033[0m Permission denied for /public.";
         if (db.remove(scope_path(session_id, obj["path"])))
         {
             return "rm: removed " + obj["path"];
@@ -579,9 +540,9 @@ static std::string route_command(const std::string& raw, const std::string& sess
                 db.make_dir("/shared");
             }
             if (db.write_file("/shared/" + filename, content)) {
-                return "shared " + path + " -> /public/" + filename;
+                return "published " + path + " -> global registry";
             }
-            return "\033[31mError:\033[0m failed to write to /public/" + filename;
+            return "\033[31mError:\033[0m failed to write to global registry";
         }
     }
 
@@ -613,7 +574,7 @@ static std::string route_command(const std::string& raw, const std::string& sess
             return "unshare: file not found: " + filename;
             
         db.remove(shared_path);
-        return "unshared /public/" + filename;
+        return "unshared " + filename + " from global registry";
     }
 
     // === ZPM Install ===
@@ -629,7 +590,7 @@ static std::string route_command(const std::string& raw, const std::string& sess
         
         std::string shared_path = "/shared/" + pkg;
         if (!db.exists(shared_path))
-            return "\033[31mError:\033[0m Package '" + pkg + "' not found in global registry (/public/).";
+            return "\033[31mError:\033[0m Package '" + pkg + "' not found in global registry.";
             
         std::string content = db.read_file(shared_path);
         
