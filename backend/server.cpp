@@ -826,6 +826,67 @@ static void handle_client(int client)
                     if (!new_resp.empty() && new_resp.back() == '\n') new_resp.pop_back();
                     response = new_resp;
                 }
+                else if (pipe_cmd.find("head") == 0)
+                {
+                    int n = 10;
+                    auto n_pos = pipe_cmd.find("-n ");
+                    if (n_pos != std::string::npos) {
+                        try { n = std::stoi(pipe_cmd.substr(n_pos + 3)); } catch (...) { n = 10; }
+                        if (n <= 0) n = 10;
+                    }
+                    std::istringstream iss(response);
+                    std::string line;
+                    std::string new_resp = "";
+                    int count = 0;
+                    while (std::getline(iss, line) && count < n)
+                    {
+                        new_resp += line + "\n";
+                        count++;
+                    }
+                    if (!new_resp.empty() && new_resp.back() == '\n') new_resp.pop_back();
+                    response = new_resp;
+                }
+                else if (pipe_cmd.find("tail") == 0)
+                {
+                    int n = 10;
+                    auto n_pos = pipe_cmd.find("-n ");
+                    if (n_pos != std::string::npos) {
+                        try { n = std::stoi(pipe_cmd.substr(n_pos + 3)); } catch (...) { n = 10; }
+                        if (n <= 0) n = 10;
+                    }
+                    std::istringstream iss(response);
+                    std::string line;
+                    std::vector<std::string> lines;
+                    while (std::getline(iss, line))
+                    {
+                        lines.push_back(line);
+                    }
+                    std::string new_resp = "";
+                    int start = (lines.size() > (size_t)n) ? (lines.size() - n) : 0;
+                    for (size_t i = start; i < lines.size(); i++)
+                    {
+                        new_resp += lines[i] + "\n";
+                    }
+                    if (!new_resp.empty() && new_resp.back() == '\n') new_resp.pop_back();
+                    response = new_resp;
+                }
+                else if (pipe_cmd.find("wc") == 0)
+                {
+                    int lines = 0, words = 0, chars = response.size();
+                    std::istringstream iss(response);
+                    std::string line;
+                    while (std::getline(iss, line))
+                    {
+                        lines++;
+                        std::istringstream wss(line);
+                        std::string word;
+                        while (wss >> word) words++;
+                    }
+                    if (pipe_cmd.find("-l") != std::string::npos) response = "  " + std::to_string(lines);
+                    else if (pipe_cmd.find("-w") != std::string::npos) response = "  " + std::to_string(words);
+                    else if (pipe_cmd.find("-c") != std::string::npos) response = "  " + std::to_string(chars);
+                    else response = "  " + std::to_string(lines) + "  " + std::to_string(words) + "  " + std::to_string(chars);
+                }
             }
             
             if (obj.count("redirect"))
