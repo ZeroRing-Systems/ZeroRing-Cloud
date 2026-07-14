@@ -265,6 +265,7 @@ bool DBManager::exists(const std::string& path) {
         return !r.empty();
     } catch (const std::exception& e) {
         return false;
+    }
 }
 
 bool DBManager::rename(const std::string& old_path_in, const std::string& new_path_in) {
