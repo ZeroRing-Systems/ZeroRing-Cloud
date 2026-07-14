@@ -528,8 +528,13 @@ static std::string route_command(const std::string& raw, const std::string& sess
         else
         {
             // Global share
-            db.write_file("/shared/" + filename, content);
-            return "shared " + path + " -> /shared/" + filename;
+            if (!db.exists("/shared")) {
+                db.make_dir("/shared");
+            }
+            if (db.write_file("/shared/" + filename, content)) {
+                return "shared " + path + " -> /shared/" + filename;
+            }
+            return "\033[31mError:\033[0m failed to write to /shared/" + filename;
         }
     }
 
