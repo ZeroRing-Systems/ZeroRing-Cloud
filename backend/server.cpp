@@ -751,6 +751,7 @@ static void handle_client(int client)
                 if (append)
                 {
                     std::string existing = db.exists(scoped_red) ? db.read_file(scoped_red) : "";
+                    if (!existing.empty() && existing.back() != '\n') existing += '\n';
                     db.write_file(scoped_red, existing + response + "\n");
                 }
                 else
