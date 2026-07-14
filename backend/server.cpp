@@ -621,9 +621,9 @@ static std::string route_command(const std::string& raw, const std::string& sess
 
         // Execute in strict ephemeral Docker container
         std::string mount_type = cfg.is_compiled ? ":/app" : ":/app:ro";
-        std::string cmd_str = "timeout 10s docker run --rm --network none -m 128m --cpus=\"0.5\" "
+        std::string cmd_str = "docker run --rm --network none -m 128m --cpus=\"0.5\" "
                               "-v " + tmp_dir + mount_type + " " +
-                              cfg.image + " sh -c '" + cfg.command + "' 2>&1";
+                              cfg.image + " timeout 10s sh -c '" + cfg.command + "' 2>&1";
 
         FILE* pipe = popen(cmd_str.c_str(), "r");
         if (!pipe)
