@@ -382,6 +382,54 @@ static std::string route_command(const std::string& raw, const std::string& sess
         return result;
     }
 
+    // === Web Fetch / HTTP Client ===
+    if (cmd == "fetch")
+    {
+        if (!obj.count("url"))
+            return json::error("fetch: missing 'url'");
+        std::string url = obj["url"];
+        if (url.find("http://") != 0 && url.find("https://") != 0)
+            return "\033[31mError:\033[0m Invalid URL protocol. Must start with http:// or https://";
+
+        // Escape single quotes in URL for safe shell execution with popen
+        std::string safe_url;
+        for (char c : url)
+        {
+            if (c == '\'')
+                safe_url += "'\\''";
+            else
+                safe_url += c;
+        }
+
+        // Run curl with 10s timeout, max 64KB, User-Agent header
+        std::string cmd_str = "timeout 10s curl -sSL -A 'ZeroRing-Terminal/2.0' --max-time 8 '" + safe_url + "' 2>&1";
+        FILE* pipe = popen(cmd_str.c_str(), "r");
+        if (!pipe)
+            return "\033[31mError:\033[0m fetch failed to execute";
+
+        char buffer[256];
+        std::string result;
+        size_t total_read = 0;
+        const size_t MAX_OUTPUT = 65536; // Cap output at 64KB
+        while (fgets(buffer, sizeof(buffer), pipe) != NULL && total_read < MAX_OUTPUT)
+        {
+            result += buffer;
+            total_read += strlen(buffer);
+        }
+        int status = pclose(pipe);
+
+        if (total_read >= MAX_OUTPUT)
+            result += "\n[output truncated at 64KB]";
+        if (WIFEXITED(status) && WEXITSTATUS(status) == 124)
+            return "\033[31mError:\033[0m fetch timed out after 10 seconds";
+        if (WIFEXITED(status) && WEXITSTATUS(status) != 0 && result.empty())
+            return "\033[31mError:\033[0m curl exited with status " + std::to_string(WEXITSTATUS(status));
+
+        if (result.empty())
+            return "fetch: empty response from server";
+        return result;
+    }
+
     // === Upload (base64 file upload) ===
     if (cmd == "upload")
     {
