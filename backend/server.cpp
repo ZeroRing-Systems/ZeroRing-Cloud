@@ -607,10 +607,15 @@ static std::string route_command(const std::string& raw, const std::string& sess
         // Make readable by sandbox user
         chmod(temp_file.c_str(), 0644);
 
-        // Execute in sandbox: restricted user, timeout, memory limit, no network
-        std::string cmd_str = "timeout 5s sudo -u sandbox bash -c '"
-                              "ulimit -v 51200 -u 10 -f 1024 2>/dev/null; " +
-                              runtime + " " + temp_file + " 2>&1'";
+        // Execute in strict ephemeral Docker container
+        std::string docker_img = "";
+        if (ext == ".py") docker_img = "python:3.9-slim python3";
+        else if (ext == ".js") docker_img = "node:18-slim node";
+        else if (ext == ".sh") docker_img = "ubuntu:22.04 bash";
+
+        std::string cmd_str = "timeout 10s docker run --rm --network none -m 128m --cpus=\"0.5\" "
+                              "-v " + temp_file + ":" + temp_file + ":ro " +
+                              docker_img + " " + temp_file + " 2>&1";
 
         FILE* pipe = popen(cmd_str.c_str(), "r");
         if (!pipe)
@@ -633,7 +638,7 @@ static std::string route_command(const std::string& raw, const std::string& sess
         if (total_read >= MAX_OUTPUT)
             result += "\n[output truncated at 8KB]";
         if (WIFEXITED(status) && WEXITSTATUS(status) == 124)
-            result += "\n[execution timed out after 5 seconds]";
+            result += "\n[execution timed out after 10 seconds]";
 
         if (result.empty())
             return "run: success (no output)";

@@ -206,6 +206,14 @@ std::string DBManager::read_file(const std::string& path) {
 }
 
 bool DBManager::write_file(const std::string& path, const std::string& data) {
+    size_t first_slash = path.find('/', 1);
+    if (path.length() > 1 && path[0] == '/' && first_slash != std::string::npos) {
+        std::string sid = path.substr(1, first_slash - 1);
+        if (sid != "shared" && get_storage_usage(sid) + data.size() > 50 * 1024 * 1024) {
+            return false;
+        }
+    }
+
     std::lock_guard<std::mutex> lock(impl_->mtx);
     try {
         pqxx::work txn(*impl_->conn);
@@ -438,6 +446,31 @@ int DBManager::get_permissions(const std::string& path_in) {
         return r.empty() ? -1 : r[0][0].as<int>();
     } catch (const std::exception& e) {
         return -1;
+    }
+}
+
+long long DBManager::get_storage_usage(const std::string& session_id) {
+    std::lock_guard<std::mutex> lock(impl_->mtx);
+    try {
+        pqxx::work txn(*impl_->conn);
+        std::string path = "/" + session_id;
+        int64_t base_dir_id = impl_->resolve_dir(txn, path);
+        if (base_dir_id < 0) return 0;
+
+        auto r = txn.exec_params(R"SQL(
+            WITH RECURSIVE dir_tree AS (
+                SELECT id FROM directories WHERE id = $1
+                UNION ALL
+                SELECT d.id FROM directories d
+                INNER JOIN dir_tree t ON d.parent_id = t.id
+            )
+            SELECT COALESCE(SUM(size), 0) FROM files 
+            WHERE directory_id IN (SELECT id FROM dir_tree);
+        )SQL", base_dir_id);
+        
+        return r[0][0].as<long long>();
+    } catch (const std::exception& e) {
+        return 0;
     }
 }
 

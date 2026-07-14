@@ -30,6 +30,7 @@ public:
     bool copy(const std::string& old_path, const std::string& new_path);
     bool chmod(const std::string& path, int permissions);
     int get_permissions(const std::string& path);
+    long long get_storage_usage(const std::string& session_id);
 
     // User Management
     bool register_user(const std::string& username, const std::string& password);

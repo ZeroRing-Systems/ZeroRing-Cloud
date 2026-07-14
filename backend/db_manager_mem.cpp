@@ -4,6 +4,7 @@
 #include <map>
 #include <iostream>
 #include <mutex>
+#include <functional>
 
 struct VFSNode {
     std::string name;
@@ -134,6 +135,14 @@ std::string DBManager::read_file(const std::string& path) {
 }
 
 bool DBManager::write_file(const std::string& path, const std::string& data) {
+    size_t first_slash = path.find('/', 1);
+    if (path.length() > 1 && path[0] == '/' && first_slash != std::string::npos) {
+        std::string sid = path.substr(1, first_slash - 1);
+        if (sid != "shared" && get_storage_usage(sid) + data.size() > 50 * 1024 * 1024) {
+            return false;
+        }
+    }
+
     std::lock_guard<std::mutex> lock(impl_->mtx);
     std::string name;
     VFSNode* parent = impl_->resolve_parent(path, name);
@@ -252,6 +261,24 @@ int DBManager::get_permissions(const std::string& path) {
     VFSNode* node = impl_->resolve(path);
     if (!node) return -1;
     return node->permissions;
+}
+
+long long DBManager::get_storage_usage(const std::string& session_id) {
+    std::lock_guard<std::mutex> lock(impl_->mtx);
+    VFSNode* base_node = impl_->resolve("/" + session_id);
+    if (!base_node) return 0;
+    
+    std::function<long long(VFSNode*)> calc_size = [&](VFSNode* n) -> long long {
+        if (!n) return 0;
+        if (!n->is_dir) return n->data.size();
+        long long sum = 0;
+        for (auto& [k, v] : n->children) {
+            sum += calc_size(v);
+        }
+        return sum;
+    };
+    
+    return calc_size(base_node);
 }
 
 bool DBManager::register_user(const std::string& username, const std::string& password) {
