@@ -38,6 +38,18 @@ static std::string generate_session_id()
     return ss.str();
 }
 
+// Security: validate that a session ID contains only safe hex characters
+static bool is_valid_session_id(const std::string& sid)
+{
+    if (sid.empty() || sid.size() > 32) return false;
+    for (char c : sid)
+    {
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')))
+            return false;
+    }
+    return true;
+}
+
 static void ensure_session_root(const std::string& session_id)
 {
     std::string user = "";
@@ -640,30 +652,37 @@ route_command(const std::string& raw, const std::string& session_id, int client_
 
         auto cfg = dispatch[ext];
 
-        // Create temporary directory for the execution context
-        std::string tmp_dir = "/tmp/run_" + session_id;
-        system(
-            ("rm -rf " + tmp_dir + " && mkdir -p " + tmp_dir + " && chmod 777 " + tmp_dir).c_str());
+        // Create temporary directory using safe mkdtemp instead of system()
+        char tmpl[] = "/tmp/zr_run_XXXXXX";
+        char* tmp_result = mkdtemp(tmpl);
+        if (!tmp_result)
+            return "run: failed to create temp directory";
+        std::string tmp_dir(tmp_result);
+        ::chmod(tmp_dir.c_str(), 0777);
 
         std::string temp_file = tmp_dir + "/script" + ext;
         FILE* f = fopen(temp_file.c_str(), "w");
         if (!f)
+        {
+            rmdir(tmp_dir.c_str());
             return "run: failed to create temp file";
+        }
         fwrite(content.data(), 1, content.size(), f);
         fclose(f);
-        chmod(temp_file.c_str(), 0666);
+        ::chmod(temp_file.c_str(), 0666);
 
-        // Execute in strict ephemeral Docker container
+        // Execute in strict ephemeral Docker container with timeout + fork bomb protection
         std::string mount_type = cfg.is_compiled ? ":/app" : ":/app:ro";
-        std::string cmd_str = "docker run --rm --network none -m 128m --cpus=\"0.5\" "
-                              "-v " +
-                              tmp_dir + mount_type + " " + cfg.image + " sh -c '" + cfg.command +
-                              "' 2>&1";
+        std::string cmd_str = "docker run --rm --network none -m 128m --cpus=\"0.5\" --pids-limit 64 "
+                              "-v " + tmp_dir + mount_type + " " +
+                              cfg.image + " timeout 10s sh -c '" + cfg.command + "' 2>&1";
 
         FILE* pipe = popen(cmd_str.c_str(), "r");
         if (!pipe)
         {
-            system(("rm -rf " + tmp_dir).c_str());
+            unlink((tmp_dir + "/script" + ext).c_str());
+            if (!ext.empty()) unlink((tmp_dir + "/out").c_str());
+            rmdir(tmp_dir.c_str());
             return "run: failed to execute";
         }
 
@@ -677,7 +696,9 @@ route_command(const std::string& raw, const std::string& session_id, int client_
             total_read += strlen(buffer);
         }
         int status = pclose(pipe);
-        system(("rm -rf " + tmp_dir).c_str());
+        unlink((tmp_dir + "/script" + ext).c_str());
+        unlink((tmp_dir + "/out").c_str());
+        rmdir(tmp_dir.c_str());
 
         if (total_read >= MAX_OUTPUT)
             result += "\n[output truncated at 8KB]";
@@ -690,54 +711,11 @@ route_command(const std::string& raw, const std::string& session_id, int client_
     }
 
     // === Web Fetch / HTTP Client ===
+    // fetch command REMOVED — it was an SSRF vector allowing attackers to
+    // probe internal services (127.0.0.1, metadata endpoints, etc.)
     if (cmd == "fetch")
     {
-        if (!obj.count("url"))
-            return json::error("fetch: missing 'url'");
-        std::string url = obj["url"];
-        if (url.find("http://") != 0 && url.find("https://") != 0)
-            return "\033[31mError:\033[0m Invalid URL protocol. Must start with http:// or "
-                   "https://";
-
-        // Escape single quotes in URL for safe shell execution with popen
-        std::string safe_url;
-        for (char c : url)
-        {
-            if (c == '\'')
-                safe_url += "'\\''";
-            else
-                safe_url += c;
-        }
-
-        // Run curl with 10s timeout, max 64KB, User-Agent header
-        std::string cmd_str =
-            "timeout 10s curl -sSL -A 'ZeroRing-Terminal/2.0' --max-time 8 '" + safe_url + "' 2>&1";
-        FILE* pipe = popen(cmd_str.c_str(), "r");
-        if (!pipe)
-            return "\033[31mError:\033[0m fetch failed to execute";
-
-        char buffer[256];
-        std::string result;
-        size_t total_read = 0;
-        const size_t MAX_OUTPUT = 65536; // Cap output at 64KB
-        while (fgets(buffer, sizeof(buffer), pipe) != NULL && total_read < MAX_OUTPUT)
-        {
-            result += buffer;
-            total_read += strlen(buffer);
-        }
-        int status = pclose(pipe);
-
-        if (total_read >= MAX_OUTPUT)
-            result += "\n[output truncated at 64KB]";
-        if (WIFEXITED(status) && WEXITSTATUS(status) == 124)
-            return "\033[31mError:\033[0m fetch timed out after 10 seconds";
-        if (WIFEXITED(status) && WEXITSTATUS(status) != 0 && result.empty())
-            return "\033[31mError:\033[0m curl exited with status " +
-                   std::to_string(WEXITSTATUS(status));
-
-        if (result.empty())
-            return "fetch: empty response from server";
-        return result;
+        return "\033[31mError:\033[0m fetch command has been disabled for security reasons";
     }
 
     // === Upload (base64 file upload) ===
@@ -1069,7 +1047,14 @@ static void handle_client(int client)
 
     if (auth_obj.count("session"))
     {
-        session_id = auth_obj["session"];
+        std::string candidate = auth_obj["session"];
+        // Security: only accept session IDs that are valid hex AND already known
+        if (is_valid_session_id(candidate))
+        {
+            std::lock_guard<std::mutex> lock(sessions_mtx);
+            if (known_sessions.count(candidate))
+                session_id = candidate;
+        }
     }
 
     if (session_id.empty())
