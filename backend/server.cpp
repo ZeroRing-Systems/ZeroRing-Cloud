@@ -90,11 +90,45 @@ static std::string scope_path(const std::string& session_id, const std::string& 
 
     std::string base = user.empty() ? ("/sessions/" + session_id) : ("/users/" + user);
 
-    if (path == "/")
-        return base;
-    if (path[0] == '/')
-        return base + path;
-    return base + "/" + path;
+    // Security: normalize path to prevent ../ traversal
+    std::string normalized;
+    std::vector<std::string> parts;
+    std::string segment;
+    std::string full = path;
+    for (size_t i = 0; i < full.size(); i++)
+    {
+        if (full[i] == '/')
+        {
+            if (segment == "..")
+            {
+                if (!parts.empty()) parts.pop_back();
+            }
+            else if (!segment.empty() && segment != ".")
+            {
+                parts.push_back(segment);
+            }
+            segment.clear();
+        }
+        else
+        {
+            segment += full[i];
+        }
+    }
+    if (segment == "..")
+    {
+        if (!parts.empty()) parts.pop_back();
+    }
+    else if (!segment.empty() && segment != ".")
+    {
+        parts.push_back(segment);
+    }
+
+    normalized = base;
+    for (auto& p : parts)
+        normalized += "/" + p;
+
+    if (normalized.empty()) normalized = base;
+    return normalized;
 }
 
 static int create_listener(int port)
@@ -839,19 +873,40 @@ route_command(const std::string& raw, const std::string& session_id, int client_
 
         if (!target_user.empty())
         {
-            // Private share
+            // Sanitize target_user to alphanumeric + underscore only
+            for (char c : target_user)
+            {
+                if (!isalnum(c) && c != '_')
+                    return "share: invalid target username";
+            }
             std::string dest_dir = "/users/" + target_user + "/shared";
             if (!db.exists(dest_dir))
             {
                 db.make_dir(dest_dir);
             }
-            std::string dest_path = dest_dir + "/" + filename;
+            // Sanitize filename: strip path separators
+            std::string safe_filename;
+            for (char c : filename)
+            {
+                if (c != '/' && c != '\\' && c != '.') safe_filename += c;
+                else if (c == '.' && !safe_filename.empty()) safe_filename += c;
+            }
+            if (safe_filename.empty()) safe_filename = "shared_file";
+            std::string dest_path = dest_dir + "/" + safe_filename;
 
             db.write_file(dest_path, content);
 
-            // Send notification to target user
-            std::string notify_html = "<b>" + session_to_user[session_id] + "</b> shared <code>" +
-                                      filename + "</code> with you!";
+            // Send notification to target user (escape HTML)
+            std::string safe_user = session_to_user.count(session_id) ? session_to_user[session_id] : "anonymous";
+            std::string notify_html;
+            for (char c : safe_user)
+            {
+                if (c == '<') notify_html += "&lt;";
+                else if (c == '>') notify_html += "&gt;";
+                else if (c == '&') notify_html += "&amp;";
+                else notify_html += c;
+            }
+            notify_html += " shared " + safe_filename + " with you!";
             std::vector<int> target_fds;
             {
                 std::lock_guard<std::mutex> lock1(clients_mtx);
@@ -988,8 +1043,20 @@ route_command(const std::string& raw, const std::string& session_id, int client_
             }
         }
 
+        // Escape text for safe JSON embedding
+        std::string escaped_text;
+        for (char c : text)
+        {
+            if (c == '"') escaped_text += "\\\"";
+            else if (c == '\\') escaped_text += "\\\\";
+            else if (c == '\n') escaped_text += "\\n";
+            else if (c == '\r') escaped_text += "\\r";
+            else if (c == '\t') escaped_text += "\\t";
+            else escaped_text += c;
+        }
+
         std::string payload = "__chat__{\"from\":\"" + username + "\",\"target\":\"" + target_user +
-                              "\",\"msg\":\"" + text + "\",\"sid\":\"" + session_id + "\"}";
+                              "\",\"msg\":\"" + escaped_text + "\",\"sid\":\"" + session_id + "\"}";
 
         std::vector<int> target_fds;
         {

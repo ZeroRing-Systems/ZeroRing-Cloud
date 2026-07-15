@@ -89,6 +89,12 @@ inline Frame decode_frame(int fd) {
         if (!recv_exact(fd, mask, 4)) return f;
     }
 
+    // Security: reject frames larger than 1MB to prevent OOM
+    if (len > 1024 * 1024) {
+        f.opcode = 0;
+        return f;
+    }
+
     f.payload.resize(len);
     if (len > 0) {
         if (!recv_exact(fd, f.payload.data(), len)) {
