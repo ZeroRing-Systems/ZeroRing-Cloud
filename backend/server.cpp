@@ -22,9 +22,9 @@ static std::map<std::string, bool> known_sessions;
 static std::map<std::string, std::string> session_to_user; // session_id -> username
 static std::mutex sessions_mtx;
 
-#include <map>
 #include <algorithm>
 #include <functional>
+#include <map>
 static std::map<int, std::string> active_clients;
 static std::mutex clients_mtx;
 
@@ -176,13 +176,16 @@ static bool wildcard_match(const char* pattern, const char* str)
 
 static std::string get_basename(const std::string& path)
 {
-    if (path.empty() || path == "/") return "/";
+    if (path.empty() || path == "/")
+        return "/";
     auto p = path.find_last_of('/');
-    if (p == std::string::npos) return path;
+    if (p == std::string::npos)
+        return path;
     if (p == path.size() - 1)
     {
         auto p2 = path.find_last_of('/', p - 1);
-        if (p2 == std::string::npos) return path.substr(0, p);
+        if (p2 == std::string::npos)
+            return path.substr(0, p);
         return path.substr(p2 + 1, p - p2 - 1);
     }
     return path.substr(p + 1);
@@ -250,7 +253,8 @@ static std::string format_ls(const std::vector<VFSEntry>& entries, bool long_for
     return out;
 }
 
-static std::string route_command(const std::string& raw, const std::string& session_id, int client_fd)
+static std::string
+route_command(const std::string& raw, const std::string& session_id, int client_fd)
 {
     auto obj = json::parse(raw);
 
@@ -275,7 +279,8 @@ static std::string route_command(const std::string& raw, const std::string& sess
     {
         std::string path = obj.count("path") ? obj["path"] : "/";
         bool long_format = false;
-        if (obj.count("mode") && (obj["mode"] == "-l" || obj["mode"] == "-la" || obj["mode"] == "-al"))
+        if (obj.count("mode") &&
+            (obj["mode"] == "-l" || obj["mode"] == "-la" || obj["mode"] == "-al"))
             long_format = true;
         if (path == "-l" || path == "-la" || path == "-al")
         {
@@ -290,18 +295,20 @@ static std::string route_command(const std::string& raw, const std::string& sess
         }
         std::string scoped = scope_path(session_id, path);
         std::cerr << "[debug] ls: path=" << path << " scoped=" << scoped << "\n";
-        
+
         // Auto-create 'shared' directory so it is visible in the root
-        if (path == "/") {
+        if (path == "/")
+        {
             std::string shared_dir = scoped + "/shared";
-            if (!db.exists(shared_dir)) {
+            if (!db.exists(shared_dir))
+            {
                 db.make_dir(shared_dir);
             }
         }
-        
+
         auto entries = db.list_dir(scoped);
         std::cerr << "[debug] ls: found " << entries.size() << " entries\n";
-        
+
         return format_ls(entries, long_format);
     }
 
@@ -317,15 +324,18 @@ static std::string route_command(const std::string& raw, const std::string& sess
         std::function<void(const std::string&, const std::string&, int)> find_rec =
             [&](const std::string& cur_scoped, const std::string& cur_display, int depth)
         {
-            if (depth > 30) return;
+            if (depth > 30)
+                return;
             auto entries = db.list_dir(cur_scoped);
             for (const auto& e : entries)
             {
                 std::string next_scoped = (cur_scoped == "/" ? "" : cur_scoped) + "/" + e.name;
                 std::string next_display = (cur_display == "/" ? "" : cur_display) + "/" + e.name;
-                if (cur_display == ".") next_display = "./" + e.name;
-                else if (cur_display == "..") next_display = "../" + e.name;
-                
+                if (cur_display == ".")
+                    next_display = "./" + e.name;
+                else if (cur_display == "..")
+                    next_display = "../" + e.name;
+
                 if (name_pat.empty() || wildcard_match(name_pat.c_str(), e.name.c_str()))
                 {
                     results.push_back(next_display);
@@ -347,7 +357,8 @@ static std::string route_command(const std::string& raw, const std::string& sess
         std::string out = "";
         for (size_t i = 0; i < results.size(); i++)
         {
-            if (i > 0) out += "\n";
+            if (i > 0)
+                out += "\n";
             out += results[i];
         }
         return out;
@@ -367,7 +378,8 @@ static std::string route_command(const std::string& raw, const std::string& sess
         std::function<void(const std::string&, const std::string&, int)> tree_rec =
             [&](const std::string& cur_scoped, const std::string& prefix, int depth)
         {
-            if (depth > 25) {
+            if (depth > 25)
+            {
                 out += "\n" + prefix + "└── ... (max depth reached)";
                 return;
             }
@@ -391,8 +403,8 @@ static std::string route_command(const std::string& raw, const std::string& sess
         };
 
         tree_rec(scoped_root, "", 0);
-        out += "\n\n" + std::to_string(dir_count) + " director" + (dir_count == 1 ? "y" : "ies") + ", " +
-               std::to_string(file_count) + " file" + (file_count == 1 ? "" : "s");
+        out += "\n\n" + std::to_string(dir_count) + " director" + (dir_count == 1 ? "y" : "ies") +
+               ", " + std::to_string(file_count) + " file" + (file_count == 1 ? "" : "s");
         return out;
     }
 
@@ -407,27 +419,46 @@ static std::string route_command(const std::string& raw, const std::string& sess
             return "chmod: cannot access '" + path + "': No such file or directory";
 
         int cur_perms = db.get_permissions(scoped);
-        if (cur_perms < 0) cur_perms = 0644;
+        if (cur_perms < 0)
+            cur_perms = 0644;
 
         int new_perms = cur_perms;
-        if (mode == "+x") new_perms |= 0111;
-        else if (mode == "-x") new_perms &= ~0111;
-        else if (mode == "+r") new_perms |= 0444;
-        else if (mode == "-r") new_perms &= ~0444;
-        else if (mode == "+w") new_perms |= 0222;
-        else if (mode == "-w") new_perms &= ~0222;
-        else if (mode == "u+x") new_perms |= 0100;
-        else if (mode == "u-x") new_perms &= ~0100;
-        else if (mode == "g+x") new_perms |= 0010;
-        else if (mode == "g-x") new_perms &= ~0010;
-        else if (mode == "o+x") new_perms |= 0001;
-        else if (mode == "o-x") new_perms &= ~0001;
-        else if (mode == "a+x") new_perms |= 0111;
-        else if (mode == "a-x") new_perms &= ~0111;
-        else {
-            try {
+        if (mode == "+x")
+            new_perms |= 0111;
+        else if (mode == "-x")
+            new_perms &= ~0111;
+        else if (mode == "+r")
+            new_perms |= 0444;
+        else if (mode == "-r")
+            new_perms &= ~0444;
+        else if (mode == "+w")
+            new_perms |= 0222;
+        else if (mode == "-w")
+            new_perms &= ~0222;
+        else if (mode == "u+x")
+            new_perms |= 0100;
+        else if (mode == "u-x")
+            new_perms &= ~0100;
+        else if (mode == "g+x")
+            new_perms |= 0010;
+        else if (mode == "g-x")
+            new_perms &= ~0010;
+        else if (mode == "o+x")
+            new_perms |= 0001;
+        else if (mode == "o-x")
+            new_perms &= ~0001;
+        else if (mode == "a+x")
+            new_perms |= 0111;
+        else if (mode == "a-x")
+            new_perms &= ~0111;
+        else
+        {
+            try
+            {
                 new_perms = std::stoi(mode, nullptr, 8);
-            } catch (...) {
+            }
+            catch (...)
+            {
                 return "chmod: invalid mode: '" + mode + "'";
             }
         }
@@ -574,7 +605,8 @@ static std::string route_command(const std::string& raw, const std::string& sess
         int perms = db.get_permissions(scoped);
         if (perms >= 0 && !(perms & 0111))
         {
-            return "run: permission denied: '" + obj["path"] + "' is not marked executable (use `chmod +x " + obj["path"] + "`)";
+            return "run: permission denied: '" + obj["path"] +
+                   "' is not marked executable (use `chmod +x " + obj["path"] + "`)";
         }
         std::string content = db.read_file(scoped);
         if (content.empty())
@@ -587,29 +619,31 @@ static std::string route_command(const std::string& raw, const std::string& sess
         if (dot != std::string::npos)
             ext = path.substr(dot);
 
-        struct LangConfig {
+        struct LangConfig
+        {
             bool is_compiled;
             std::string image;
             std::string command;
         };
 
         std::map<std::string, LangConfig> dispatch = {
-            {".py",  {false, "python:3.9-slim",      "python3 /app/script.py"}},
-            {".js",  {false, "node:18-slim",         "node /app/script.js"}},
-            {".sh",  {false, "ubuntu:22.04",         "bash /app/script.sh"}},
-            {".cpp", {true,  "gcc:13",               "cd /app && g++ script.cpp -o out && ./out"}},
-            {".rs",  {true,  "rust:slim",            "cd /app && rustc script.rs -o out && ./out"}},
-            {".go",  {true,  "golang:1.21-alpine",   "cd /app && go run script.go"}}
-        };
+            {".py", {false, "python:3.9-slim", "python3 /app/script.py"}},
+            {".js", {false, "node:18-slim", "node /app/script.js"}},
+            {".sh", {false, "ubuntu:22.04", "bash /app/script.sh"}},
+            {".cpp", {true, "gcc:13", "cd /app && g++ script.cpp -o out && ./out"}},
+            {".rs", {true, "rust:slim", "cd /app && rustc script.rs -o out && ./out"}},
+            {".go", {true, "golang:1.21-alpine", "cd /app && go run script.go"}}};
 
         if (dispatch.find(ext) == dispatch.end())
-            return "run: unsupported file type '" + ext + "' (supported: .py, .js, .sh, .cpp, .rs, .go)";
+            return "run: unsupported file type '" + ext +
+                   "' (supported: .py, .js, .sh, .cpp, .rs, .go)";
 
         auto cfg = dispatch[ext];
 
         // Create temporary directory for the execution context
         std::string tmp_dir = "/tmp/run_" + session_id;
-        system(("rm -rf " + tmp_dir + " && mkdir -p " + tmp_dir + " && chmod 777 " + tmp_dir).c_str());
+        system(
+            ("rm -rf " + tmp_dir + " && mkdir -p " + tmp_dir + " && chmod 777 " + tmp_dir).c_str());
 
         std::string temp_file = tmp_dir + "/script" + ext;
         FILE* f = fopen(temp_file.c_str(), "w");
@@ -622,8 +656,9 @@ static std::string route_command(const std::string& raw, const std::string& sess
         // Execute in strict ephemeral Docker container
         std::string mount_type = cfg.is_compiled ? ":/app" : ":/app:ro";
         std::string cmd_str = "docker run --rm --network none -m 128m --cpus=\"0.5\" "
-                              "-v " + tmp_dir + mount_type + " " +
-                              cfg.image + " timeout 10s sh -c '" + cfg.command + "' 2>&1";
+                              "-v " +
+                              tmp_dir + mount_type + " " + cfg.image + " sh -c '" + cfg.command +
+                              "' 2>&1";
 
         FILE* pipe = popen(cmd_str.c_str(), "r");
         if (!pipe)
@@ -631,7 +666,7 @@ static std::string route_command(const std::string& raw, const std::string& sess
             system(("rm -rf " + tmp_dir).c_str());
             return "run: failed to execute";
         }
-        
+
         char buffer[256];
         std::string result;
         size_t total_read = 0;
@@ -661,7 +696,8 @@ static std::string route_command(const std::string& raw, const std::string& sess
             return json::error("fetch: missing 'url'");
         std::string url = obj["url"];
         if (url.find("http://") != 0 && url.find("https://") != 0)
-            return "\033[31mError:\033[0m Invalid URL protocol. Must start with http:// or https://";
+            return "\033[31mError:\033[0m Invalid URL protocol. Must start with http:// or "
+                   "https://";
 
         // Escape single quotes in URL for safe shell execution with popen
         std::string safe_url;
@@ -674,7 +710,8 @@ static std::string route_command(const std::string& raw, const std::string& sess
         }
 
         // Run curl with 10s timeout, max 64KB, User-Agent header
-        std::string cmd_str = "timeout 10s curl -sSL -A 'ZeroRing-Terminal/2.0' --max-time 8 '" + safe_url + "' 2>&1";
+        std::string cmd_str =
+            "timeout 10s curl -sSL -A 'ZeroRing-Terminal/2.0' --max-time 8 '" + safe_url + "' 2>&1";
         FILE* pipe = popen(cmd_str.c_str(), "r");
         if (!pipe)
             return "\033[31mError:\033[0m fetch failed to execute";
@@ -695,7 +732,8 @@ static std::string route_command(const std::string& raw, const std::string& sess
         if (WIFEXITED(status) && WEXITSTATUS(status) == 124)
             return "\033[31mError:\033[0m fetch timed out after 10 seconds";
         if (WIFEXITED(status) && WEXITSTATUS(status) != 0 && result.empty())
-            return "\033[31mError:\033[0m curl exited with status " + std::to_string(WEXITSTATUS(status));
+            return "\033[31mError:\033[0m curl exited with status " +
+                   std::to_string(WEXITSTATUS(status));
 
         if (result.empty())
             return "fetch: empty response from server";
@@ -803,9 +841,9 @@ static std::string route_command(const std::string& raw, const std::string& sess
     {
         if (!obj.count("path"))
             return json::error("share: missing 'path'");
-            
+
         std::string path = obj["path"];
-        
+
         std::string target_user = "";
         if (obj.count("target"))
             target_user = obj["target"];
@@ -813,52 +851,60 @@ static std::string route_command(const std::string& raw, const std::string& sess
         std::string actual_path = scope_path(session_id, path);
         if (!db.exists(actual_path))
             return "share: file not found: " + path;
-            
+
         std::string content = db.read_file(actual_path);
-        
+
         std::string filename = path;
         auto slash = path.rfind('/');
         if (slash != std::string::npos)
             filename = path.substr(slash + 1);
-            
+
         if (!target_user.empty())
         {
             // Private share
             std::string dest_dir = "/users/" + target_user + "/shared";
-            if (!db.exists(dest_dir)) {
+            if (!db.exists(dest_dir))
+            {
                 db.make_dir(dest_dir);
             }
             std::string dest_path = dest_dir + "/" + filename;
-            
+
             db.write_file(dest_path, content);
-            
+
             // Send notification to target user
-            std::string notify_html = "<b>" + session_to_user[session_id] + "</b> shared <code>" + filename + "</code> with you!";
+            std::string notify_html = "<b>" + session_to_user[session_id] + "</b> shared <code>" +
+                                      filename + "</code> with you!";
             std::vector<int> target_fds;
             {
                 std::lock_guard<std::mutex> lock1(clients_mtx);
                 std::lock_guard<std::mutex> lock2(sessions_mtx);
-                for (auto const& [fd, s_id] : active_clients) {
+                for (auto const& [fd, s_id] : active_clients)
+                {
                     auto it2 = session_to_user.find(s_id);
-                    if (it2 != session_to_user.end() && it2->second == target_user) {
+                    if (it2 != session_to_user.end() && it2->second == target_user)
+                    {
                         target_fds.push_back(fd);
                     }
                 }
             }
             std::string payload = "__notify__" + notify_html;
-            for (int fd : target_fds) {
+            for (int fd : target_fds)
+            {
                 ws::send_frame(fd, 0x1, payload);
             }
-            
-            return "\033[32mSuccess:\033[0m Privately shared " + path + " with @" + target_user + ".";
+
+            return "\033[32mSuccess:\033[0m Privately shared " + path + " with @" + target_user +
+                   ".";
         }
         else
         {
             // Global share
-            if (!db.exists("/shared")) {
+            if (!db.exists("/shared"))
+            {
                 db.make_dir("/shared");
             }
-            if (db.write_file("/shared/" + filename, content)) {
+            if (db.write_file("/shared/" + filename, content))
+            {
                 return "published " + path + " -> global registry";
             }
             return "\033[31mError:\033[0m failed to write to global registry";
@@ -877,21 +923,22 @@ static std::string route_command(const std::string& raw, const std::string& sess
         }
 
         if (username != "root")
-            return "\033[31mError:\033[0m Permission denied. Only 'root' can delete globally shared files.";
+            return "\033[31mError:\033[0m Permission denied. Only 'root' can delete globally "
+                   "shared files.";
 
         if (!obj.count("path"))
             return json::error("unshare: missing 'path'");
-            
+
         std::string path = obj["path"];
         std::string filename = path;
         auto slash = path.rfind('/');
         if (slash != std::string::npos)
             filename = path.substr(slash + 1);
-            
+
         std::string shared_path = "/shared/" + filename;
         if (!db.exists(shared_path))
             return "unshare: file not found: " + filename;
-            
+
         db.remove(shared_path);
         return "unshared " + filename + " from global registry";
     }
@@ -903,23 +950,24 @@ static std::string route_command(const std::string& raw, const std::string& sess
             return json::error("zpm: missing 'package'");
         if (!obj.count("cwd"))
             return json::error("zpm: missing 'cwd'");
-            
+
         std::string pkg = obj["package"];
         std::string cwd = obj["cwd"];
-        
+
         std::string shared_path = "/shared/" + pkg;
         if (!db.exists(shared_path))
             return "\033[31mError:\033[0m Package '" + pkg + "' not found in global registry.";
-            
+
         std::string content = db.read_file(shared_path);
-        
+
         std::string dest_path = cwd;
-        if (dest_path.back() != '/') dest_path += "/";
+        if (dest_path.back() != '/')
+            dest_path += "/";
         dest_path += pkg;
-        
+
         std::string actual_dest = scope_path(session_id, dest_path);
         db.write_file(actual_dest, content);
-        
+
         return "\033[32mSuccess:\033[0m Package '" + pkg + "' installed to " + dest_path;
     }
 
@@ -940,7 +988,7 @@ static std::string route_command(const std::string& raw, const std::string& sess
             raw_msg = obj["path"];
         else if (obj.count("msg"))
             raw_msg = obj["msg"];
-            
+
         std::string username = "anonymous";
         {
             std::lock_guard<std::mutex> lock(sessions_mtx);
@@ -948,41 +996,51 @@ static std::string route_command(const std::string& raw, const std::string& sess
             if (it != session_to_user.end())
                 username = it->second;
         }
-        
+
         std::string target_user = "global";
         std::string text = raw_msg;
-        
-        if (raw_msg.rfind("@", 0) == 0) {
+
+        if (raw_msg.rfind("@", 0) == 0)
+        {
             size_t space = raw_msg.find(' ');
-            if (space != std::string::npos) {
+            if (space != std::string::npos)
+            {
                 target_user = raw_msg.substr(1, space - 1);
                 text = raw_msg.substr(space + 1);
             }
         }
-        
-        std::string payload = "__chat__{\"from\":\"" + username + "\",\"target\":\"" + target_user + "\",\"msg\":\"" + text + "\",\"sid\":\"" + session_id + "\"}";
-        
+
+        std::string payload = "__chat__{\"from\":\"" + username + "\",\"target\":\"" + target_user +
+                              "\",\"msg\":\"" + text + "\",\"sid\":\"" + session_id + "\"}";
+
         std::vector<int> target_fds;
         {
             std::lock_guard<std::mutex> lock1(clients_mtx);
             std::lock_guard<std::mutex> lock2(sessions_mtx);
-            for (auto const& [fd, s_id] : active_clients) {
-                if (fd == client_fd) continue; // sender gets echo separately
-                if (target_user == "global") {
+            for (auto const& [fd, s_id] : active_clients)
+            {
+                if (fd == client_fd)
+                    continue; // sender gets echo separately
+                if (target_user == "global")
+                {
                     target_fds.push_back(fd);
-                } else {
+                }
+                else
+                {
                     auto it2 = session_to_user.find(s_id);
-                    if (it2 != session_to_user.end() && it2->second == target_user) {
+                    if (it2 != session_to_user.end() && it2->second == target_user)
+                    {
                         target_fds.push_back(fd);
                     }
                 }
             }
         }
-        
-        for (int fd : target_fds) {
+
+        for (int fd : target_fds)
+        {
             ws::send_frame(fd, 0x1, payload);
         }
-        
+
         // Also send back to sender so their chat UI updates
         ws::send_frame(client_fd, 0x1, payload);
         return "";
@@ -1050,9 +1108,9 @@ static void handle_client(int client)
             std::cerr << "[debug] raw frame (" << frame.payload.size() << " bytes): ["
                       << frame.payload << "]\n";
             std::string response = route_command(frame.payload, session_id, client);
-            
+
             auto obj = json::parse(frame.payload);
-            
+
             if (obj.count("pipe"))
             {
                 std::string pipe_cmd = obj["pipe"];
@@ -1069,16 +1127,26 @@ static void handle_client(int client)
                             new_resp += line + "\n";
                         }
                     }
-                    if (!new_resp.empty() && new_resp.back() == '\n') new_resp.pop_back();
+                    if (!new_resp.empty() && new_resp.back() == '\n')
+                        new_resp.pop_back();
                     response = new_resp;
                 }
                 else if (pipe_cmd.find("head") == 0)
                 {
                     int n = 10;
                     auto n_pos = pipe_cmd.find("-n ");
-                    if (n_pos != std::string::npos) {
-                        try { n = std::stoi(pipe_cmd.substr(n_pos + 3)); } catch (...) { n = 10; }
-                        if (n <= 0) n = 10;
+                    if (n_pos != std::string::npos)
+                    {
+                        try
+                        {
+                            n = std::stoi(pipe_cmd.substr(n_pos + 3));
+                        }
+                        catch (...)
+                        {
+                            n = 10;
+                        }
+                        if (n <= 0)
+                            n = 10;
                     }
                     std::istringstream iss(response);
                     std::string line;
@@ -1089,16 +1157,26 @@ static void handle_client(int client)
                         new_resp += line + "\n";
                         count++;
                     }
-                    if (!new_resp.empty() && new_resp.back() == '\n') new_resp.pop_back();
+                    if (!new_resp.empty() && new_resp.back() == '\n')
+                        new_resp.pop_back();
                     response = new_resp;
                 }
                 else if (pipe_cmd.find("tail") == 0)
                 {
                     int n = 10;
                     auto n_pos = pipe_cmd.find("-n ");
-                    if (n_pos != std::string::npos) {
-                        try { n = std::stoi(pipe_cmd.substr(n_pos + 3)); } catch (...) { n = 10; }
-                        if (n <= 0) n = 10;
+                    if (n_pos != std::string::npos)
+                    {
+                        try
+                        {
+                            n = std::stoi(pipe_cmd.substr(n_pos + 3));
+                        }
+                        catch (...)
+                        {
+                            n = 10;
+                        }
+                        if (n <= 0)
+                            n = 10;
                     }
                     std::istringstream iss(response);
                     std::string line;
@@ -1113,7 +1191,8 @@ static void handle_client(int client)
                     {
                         new_resp += lines[i] + "\n";
                     }
-                    if (!new_resp.empty() && new_resp.back() == '\n') new_resp.pop_back();
+                    if (!new_resp.empty() && new_resp.back() == '\n')
+                        new_resp.pop_back();
                     response = new_resp;
                 }
                 else if (pipe_cmd.find("wc") == 0)
@@ -1126,25 +1205,32 @@ static void handle_client(int client)
                         lines++;
                         std::istringstream wss(line);
                         std::string word;
-                        while (wss >> word) words++;
+                        while (wss >> word)
+                            words++;
                     }
-                    if (pipe_cmd.find("-l") != std::string::npos) response = "  " + std::to_string(lines);
-                    else if (pipe_cmd.find("-w") != std::string::npos) response = "  " + std::to_string(words);
-                    else if (pipe_cmd.find("-c") != std::string::npos) response = "  " + std::to_string(chars);
-                    else response = "  " + std::to_string(lines) + "  " + std::to_string(words) + "  " + std::to_string(chars);
+                    if (pipe_cmd.find("-l") != std::string::npos)
+                        response = "  " + std::to_string(lines);
+                    else if (pipe_cmd.find("-w") != std::string::npos)
+                        response = "  " + std::to_string(words);
+                    else if (pipe_cmd.find("-c") != std::string::npos)
+                        response = "  " + std::to_string(chars);
+                    else
+                        response = "  " + std::to_string(lines) + "  " + std::to_string(words) +
+                                   "  " + std::to_string(chars);
                 }
             }
-            
+
             if (obj.count("redirect"))
             {
                 std::string red_file = obj["redirect"];
                 bool append = obj.count("append") ? (obj["append"] == "true") : false;
                 std::string scoped_red = scope_path(session_id, red_file);
-                
+
                 if (append)
                 {
                     std::string existing = db.exists(scoped_red) ? db.read_file(scoped_red) : "";
-                    if (!existing.empty() && existing.back() != '\n') existing += '\n';
+                    if (!existing.empty() && existing.back() != '\n')
+                        existing += '\n';
                     db.write_file(scoped_red, existing + response + "\n");
                 }
                 else
@@ -1153,11 +1239,9 @@ static void handle_client(int client)
                 }
                 response = ""; // Suppress output
             }
-            
-            if (!response.empty())
-            {
-                ws::send_frame(client, 0x1, response);
-            }
+
+            // Always send response so client can stop waiting and refresh prompt
+            ws::send_frame(client, 0x1, response);
         }
 
         if (frame.opcode == 0x9)
