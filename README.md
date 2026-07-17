@@ -90,3 +90,27 @@ python3 -m http.server 8000   # Open http://localhost:8000
 | Frontend Hosting | Vercel |
 | Backend Hosting | Azure VM (Ubuntu 24.04 LTS) |
 | CI/CD | GitHub Actions |
+
+## Metrics
+
+| Component | File | Lines of Code |
+|-----------|------|:---:|
+| WASM Kernel | `kernel.cpp` | 2,416 |
+| WebSocket Server | `server.cpp` | 1,343 |
+| PostgreSQL VFS | `db_manager_pg.cpp` | 541 |
+| In-Memory VFS | `db_manager_mem.cpp` | 326 |
+| WebSocket Protocol | `websocket.h` | 139 |
+| JSON Parser | `json_util.h` | 112 |
+| DB Interface | `db_manager.h` | 43 |
+| Terminal Frontend | `terminal.js` | 1,000 |
+| Terminal UI | `terminal.html` | 659 |
+| CI/CD Pipeline | `deploy.yml` | 39 |
+| **Total** | | **6,618** |
+
+### Security
+
+- **7 vulnerabilities** identified and patched (Session ID Injection RCE, SSRF, path traversal, WebSocket OOM, JSON injection, XSS, missing Docker timeout)
+- **0 external frameworks** — every line is hand-written
+- **6 language runtimes** sandboxed via Docker (Python, Node.js, Bash, C++, Rust, Go)
+- Docker containers run with: `--network none`, `-m 128m`, `--cpus=0.5`, `--pids-limit 64`, `timeout 10s`
+
